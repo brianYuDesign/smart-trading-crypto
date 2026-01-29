@@ -1,6 +1,6 @@
 """
-Smart Trading Crypto - 主程序
-整合市場分析、新聞監控和信號生成
+Smart Trading Crypto - 主程式（整合版）
+整合市場分析、新聞監控、信號生成和 Telegram 指令處理
 """
 import os
 import yaml
@@ -9,7 +9,9 @@ from src.market_analyzer import MarketAnalyzer
 from src.news_monitor import NewsMonitor
 from src.signal_generator import SignalGenerator
 from src.notifier import TelegramNotifier
+from src.telegram_commands import CommandHandler  # 新增：指令處理器
 import logging
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,27 +32,46 @@ def load_config(config_path: str = 'config/config.yaml') -> dict:
         raise
 
 
-def main():
-    # 初始化新聞監控
-    news_monitor = NewsMonitor()
+def run_bot_with_commands():
+    """運行帶有指令處理的 Bot"""
+    logger.info("=" * 60)
+    logger.info("Smart Trading Crypto Bot 啟動（指令模式）")
+    logger.info("=" * 60)
+    
+    try:
+        # 從環境變數獲取 Token
+        bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        chat_id = os.getenv('TELEGRAM_CHAT_ID')
+        
+        if not bot_token or not chat_id:
+            logger.error("❌ 請設定 TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 環境變數")
+            return
+        
+        # 初始化指令處理器
+        command_handler = CommandHandler(bot_token, chat_id)
+        
+        logger.info("✅ Bot 指令處理器已啟動")
+        logger.info("📱 等待 Telegram 指令...")
+        logger.info("")
+        logger.info("可用指令：")
+        logger.info("  /news [數量] - 查詢最新新聞")
+        logger.info("  /price <幣種> - 查詢即時價格")
+        logger.info("  /prices - 主流幣種價格")
+        logger.info("  /market - 市場總覽")
+        logger.info("  /analysis <幣種> - 技術分析")
+        logger.info("  /help - 查看所有指令")
+        logger.info("=" * 60)
+        
+        # 處理指令（單次執行）
+        command_handler.process_commands()
+        
+    except Exception as e:
+        logger.error(f"❌ Bot 運行錯誤: {e}")
+        raise
 
-    # 檢查新新聞
-    print("\n" + "="*70)
-    print("📰 檢查加密貨幣新聞")
-    print("="*70)
 
-    new_news = news_monitor.monitor_news()
-
-    # 只在有新新聞時發送提醒
-    if new_news:
-        news_message = news_monitor.format_news_message(new_news)
-        if news_message:
-            send_telegram_message(news_message)
-            print(f"✅ 已發送 {len(new_news)} 則新新聞提醒到 Telegram")
-    else:
-        print("✅ 沒有新新聞，不發送提醒")
-
-    """主程序"""
+def run_monitoring_and_analysis():
+    """運行市場監控和分析（原有功能）"""
     logger.info("=" * 60)
     logger.info("Smart Trading Crypto 系統啟動")
     logger.info("=" * 60)
@@ -88,63 +109,47 @@ def main():
         if not market_stability['stable']:
             logger.warning(f"市場穩定性警報: {market_stability['reason']}")
             notifier.notify_risk_alert('volatility', market_conditions)
-            logger.info("由於市場波動過大，停止交易信號分析")
+            logger.info("由於市場波動，停止交易信號分析")
             return
-        
+            
         logger.info("✓ 市場穩定性檢查通過")
-        logger.info(f"  當前價格: ${market_conditions['current_price']:.2f}")
-        logger.info(f"  24h 漲跌: {market_conditions['price_change_24h']:.2f}%")
-        logger.info(f"  波動率: {market_conditions['volatility']:.2f}%")
         
-        # 3. 獲取市場數據並分析
-        logger.info("\n--- 步驟 3: 分析市場數據 ---")
-        klines_df = market_analyzer.fetch_klines()
+        # 3. 生成交易信號
+        logger.info("\n--- 步驟 3: 生成交易信號 ---")
+        signals = signal_generator.generate_signals()
         
-        # 4. 生成交易信號
-        logger.info("\n--- 步驟 4: 生成交易信號 ---")
-        analysis_result = signal_generator.analyze(klines_df)
-        
-        logger.info(f"當前 RSI: {analysis_result['rsi']}")
-        logger.info(f"當前 MACD: {analysis_result['macd']:.4f}")
-        
-        # 5. 發送信號通知
-        if analysis_result['buy_signal']:
-            logger.info("\n🟢 檢測到買入信號！")
-            buy_signal = analysis_result['buy_signal']
-            logger.info(f"  信號強度: {buy_signal['strength']}")
-            logger.info(f"  滿足條件: {buy_signal['conditions_met']}/4")
-            logger.info(f"  原因: {', '.join(buy_signal['reasons'])}")
-            
-            # 發送 Telegram 通知
-            notifier.notify_buy_signal(buy_signal, market_conditions)
-        
-        elif analysis_result['sell_signal']:
-            logger.info("\n🔴 檢測到賣出信號！")
-            sell_signal = analysis_result['sell_signal']
-            logger.info(f"  信號強度: {sell_signal['strength']}")
-            logger.info(f"  滿足條件: {sell_signal['conditions_met']}/4")
-            logger.info(f"  原因: {', '.join(sell_signal['reasons'])}")
-            
-            # 發送 Telegram 通知
-            notifier.notify_sell_signal(sell_signal, market_conditions)
-        
+        if signals:
+            logger.info(f"✓ 生成 {len(signals)} 個交易信號")
+            notifier.notify_trading_signals(signals)
         else:
-            logger.info("\n⚪ 當前無交易信號")
-            logger.info("  市場處於觀望狀態，繼續監控...")
+            logger.info("目前沒有符合條件的交易信號")
         
+        # 發送系統完成通知
+        notifier.notify_system_status('completed', '分析完成')
         logger.info("\n" + "=" * 60)
-        logger.info("分析完成")
+        logger.info("系統分析完成")
         logger.info("=" * 60)
         
     except Exception as e:
-        logger.error(f"執行過程中發生錯誤: {e}", exc_info=True)
-        try:
-            notifier = TelegramNotifier(load_config())
-            notifier.notify_system_status('error', f'系統錯誤: {str(e)}')
-        except:
-            pass
+        logger.error(f"系統運行錯誤: {e}")
         raise
 
 
-if __name__ == '__main__':
+def main():
+    """主程式入口"""
+    # 判斷運行模式
+    mode = os.getenv('BOT_MODE', 'commands')  # 預設為指令模式
+    
+    if mode == 'commands':
+        # 指令處理模式（用於 GitHub Actions 或定時執行）
+        run_bot_with_commands()
+    elif mode == 'monitoring':
+        # 監控分析模式（原有功能）
+        run_monitoring_and_analysis()
+    else:
+        logger.error(f"未知的運行模式: {mode}")
+        logger.info("請設定 BOT_MODE 環境變數為 'commands' 或 'monitoring'")
+
+
+if __name__ == "__main__":
     main()
