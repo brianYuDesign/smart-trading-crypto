@@ -9,7 +9,7 @@ from src.market_analyzer import MarketAnalyzer
 from src.news_monitor import NewsMonitor
 from src.signal_generator import SignalGenerator
 from src.notifier import TelegramNotifier
-from src.telegram_commands import CommandHandler  # 新增：指令處理器
+from src.telegram_commands import TelegramCommandHandler  # 新增：指令處理器
 import logging
 import time
 
@@ -48,7 +48,7 @@ def run_bot_with_commands():
             return
         
         # 初始化指令處理器
-        command_handler = CommandHandler(bot_token, chat_id)
+        command_handler = TelegramCommandHandler(bot_token, chat_id)
         
         logger.info("✅ Bot 指令處理器已啟動")
         logger.info("📱 等待 Telegram 指令...")
