@@ -37,7 +37,7 @@ import os
 import requests
 from datetime import datetime
 from src.news_monitor import NewsMonitor
-from market_data import MarketDataAPI, MarketDataFormatter
+from src.market_data import MarketDataAPI, MarketDataFormatter
 
 class TelegramCommandHandler:
     def __init__(self):
