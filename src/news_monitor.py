@@ -58,7 +58,7 @@ class NewsMonitor:
 
         # 去重和提醒頻率控制
         self.seen_news_file = Path('data/seen_news.json')
-        self.seen_news_file.parent.mkdir(exist_ok=True)
+        self.seen_news_file.parent.mkdir(parents=True, exist_ok=True)
         self.seen_news = self._load_seen_news()
         self.max_alert_count = 5  # 每則新聞最多提醒5次
 
@@ -83,8 +83,8 @@ class NewsMonitor:
     def _get_news_hash(self, title: str) -> str:
         """生成新聞的唯一標識（基於標題相似度）"""
         # 清理標題：移除特殊字符、轉小寫、移除多餘空格
-        clean_title = re.sub(r'[^\w\s]', '', title.lower())
-        clean_title = re.sub(r'\s+', ' ', clean_title).strip()
+        clean_title = re.sub(r'[^\\w\\s]', '', title.lower())
+        clean_title = re.sub(r'\\s+', ' ', clean_title).strip()
         # 只取前100個字符來計算hash（避免過度精確）
         return hashlib.md5(clean_title[:100].encode()).hexdigest()
 
