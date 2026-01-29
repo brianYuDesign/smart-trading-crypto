@@ -10,3 +10,7 @@ pyyaml==6.0.1
 # Knowledge Integration Dependencies
 aiohttp==3.9.1
 beautifulsoup4==4.12.2
+
+# Web Server Dependencies (for Webhook mode)
+Flask==3.0.0
+gunicorn==21.2.0
