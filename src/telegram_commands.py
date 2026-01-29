@@ -1,11 +1,10 @@
 """
-Telegram Bot 指令處理模組
+Telegram Bot 指令處理模組 v2 - 擴充版
 
-支援指令:
-- /news [數量] - 查詢最新新聞 (預設5則)
-- /latest - 快速查看最新新聞 (同/news)
-- /status - Bot運行狀態
-- /help - 幫助訊息
+新增功能:
+1. 市場數據查詢 (/price, /market, /trending)
+2. 技術分析 (/chart, /analysis)
+3. 個人化訂閱 (/subscribe, /unsubscribe, /mysubs)
 """
 
 import os
@@ -17,12 +16,12 @@ class TelegramCommandHandler:
     def __init__(self):
         self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
         self.chat_id = os.getenv('TELEGRAM_CHAT_ID')
-        self.api_key = os.getenv('CRYPTOPANIC_API_KEY')
-        self.news_monitor = NewsMonitor(self.api_key)
+        self.news_monitor = NewsMonitor()
+        self.coingecko_base = 'https://api.coingecko.com/api/v3'
 
     def send_message(self, text, parse_mode='HTML'):
-        """發送訊息到 Telegram"""
-        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        """發送消息到 Telegram"""
+        url = f'https://api.telegram.org/bot{self.bot_token}/sendMessage'
         data = {
             'chat_id': self.chat_id,
             'text': text,
@@ -32,187 +31,396 @@ class TelegramCommandHandler:
             response = requests.post(url, json=data, timeout=10)
             return response.json()
         except Exception as e:
-            print(f"❌ 發送訊息失敗: {e}")
+            print(f"發送消息失敗: {e}")
             return None
 
-    def get_updates(self, offset=None):
-        """獲取新的訊息更新"""
-        url = f"https://api.telegram.org/bot{self.bot_token}/getUpdates"
-        params = {'timeout': 10}
-        if offset:
-            params['offset'] = offset
-
+    def send_photo(self, photo_url, caption=''):
+        """發送圖片到 Telegram"""
+        url = f'https://api.telegram.org/bot{self.bot_token}/sendPhoto'
+        data = {
+            'chat_id': self.chat_id,
+            'photo': photo_url,
+            'caption': caption,
+            'parse_mode': 'HTML'
+        }
         try:
-            response = requests.get(url, params=params, timeout=15)
+            response = requests.post(url, json=data, timeout=10)
             return response.json()
         except Exception as e:
-            print(f"❌ 獲取更新失敗: {e}")
+            print(f"發送圖片失敗: {e}")
             return None
 
-    def handle_news_command(self, count=5):
-        """處理 /news 指令 - 查詢最新新聞"""
+    # ========== 市場數據功能 ==========
+
+    def get_price(self, symbol='BTC'):
+        """查詢加密貨幣即時價格"""
         try:
-            count = min(max(int(count), 1), 20)  # 限制 1-20 則
-        except:
-            count = 5
+            # 轉換常見符號
+            coin_map = {
+                'BTC': 'bitcoin',
+                'ETH': 'ethereum',
+                'BNB': 'binancecoin',
+                'SOL': 'solana',
+                'ADA': 'cardano',
+                'XRP': 'ripple',
+                'DOT': 'polkadot',
+                'DOGE': 'dogecoin',
+                'MATIC': 'matic-network',
+                'AVAX': 'avalanche-2'
+            }
 
-        print(f"\n📰 處理 /news 指令，查詢 {count} 則新聞...")
+            coin_id = coin_map.get(symbol.upper(), symbol.lower())
 
-        # 抓取新聞 (不檢查去重，直接返回最新的)
-        all_news = self.news_monitor.fetch_all_news()
+            url = f'{self.coingecko_base}/simple/price'
+            params = {
+                'ids': coin_id,
+                'vs_currencies': 'usd',
+                'include_24hr_change': 'true',
+                'include_24hr_vol': 'true',
+                'include_market_cap': 'true'
+            }
 
-        if not all_news:
-            return "😔 抱歉，目前沒有獲取到新聞，請稍後再試。"
+            response = requests.get(url, params=params, timeout=10)
+            data = response.json()
 
-        # 取最新的 N 則
-        latest_news = all_news[:count]
+            if coin_id not in data:
+                return f"❌ 找不到幣種: {symbol}"
 
-        # 格式化訊息
-        message = f"🔔 <b>最新加密貨幣新聞</b>\n\n"
-        message += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        message += f"📰 共 {len(latest_news)} 則新聞\n"
-        message += "\n" + "━" * 30 + "\n"
+            coin_data = data[coin_id]
+            price = coin_data['usd']
+            change_24h = coin_data.get('usd_24h_change', 0)
+            volume_24h = coin_data.get('usd_24h_vol', 0)
+            market_cap = coin_data.get('usd_market_cap', 0)
 
-        for i, news in enumerate(latest_news, 1):
-            message += f"\n📍 [{news.get('source', 'Unknown')}]\n"
-            message += f"🕐 {news.get('published', 'N/A')}\n\n"
+            # 判斷漲跌
+            change_emoji = "🟢" if change_24h >= 0 else "🔴"
+            change_sign = "+" if change_24h >= 0 else ""
 
-            title = news.get('title', 'No title')
-            if len(title) > 100:
-                title = title[:97] + "..."
-            message += f"📌 <b>{title}</b>\n\n"
+            message = f"""
+<b>💰 {symbol.upper()} 價格資訊</b>
 
-            summary = news.get('summary', '')
-            if summary:
-                if len(summary) > 150:
-                    summary = summary[:147] + "..."
-                message += f"💬 {summary}\n\n"
+📊 <b>當前價格:</b> ${price:,.2f}
+{change_emoji} <b>24h 變化:</b> {change_sign}{change_24h:.2f}%
+📈 <b>24h 成交量:</b> ${volume_24h:,.0f}
+💎 <b>市值:</b> ${market_cap:,.0f}
 
-            message += f"🔗 {news.get('url', '#')}\n"
+<i>更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>
+"""
+            return message.strip()
 
-            if i < len(latest_news):
-                message += "\n" + "━" * 30 + "\n"
+        except Exception as e:
+            return f"❌ 查詢價格失敗: {str(e)}"
 
-        return message
+    def get_market_overview(self):
+        """查看市場概況"""
+        try:
+            url = f'{self.coingecko_base}/global'
+            response = requests.get(url, timeout=10)
+            data = response.json()['data']
 
-    def handle_status_command(self):
-        """處理 /status 指令 - Bot 狀態"""
-        message = "🤖 <b>Bot 狀態報告</b>\n\n"
-        message += f"✅ 運行正常\n"
-        message += f"📅 當前時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        message += f"📡 新聞來源: 5 個\n"
-        message += f"   • CryptoPanic API\n"
-        message += f"   • CoinDesk RSS\n"
-        message += f"   • CoinTelegraph RSS\n"
-        message += f"   • Decrypt RSS\n"
-        message += f"   • Bitcoin Magazine RSS\n"
-        message += f"\n💡 使用 /news 查詢最新新聞"
+            total_market_cap = data['total_market_cap']['usd']
+            total_volume = data['total_volume']['usd']
+            btc_dominance = data['market_cap_percentage']['bitcoin']
+            eth_dominance = data['market_cap_percentage']['ethereum']
+            active_cryptos = data['active_cryptocurrencies']
 
-        return message
+            message = f"""
+<b>🌍 加密貨幣市場概況</b>
 
-    def handle_help_command(self):
-        """處理 /help 指令 - 幫助訊息"""
-        message = "📖 <b>可用指令</b>\n\n"
-        message += "📰 <b>/news [數量]</b>\n"
-        message += "   查詢最新加密貨幣新聞\n"
-        message += "   範例: /news 或 /news 10\n\n"
-        message += "⚡ <b>/latest</b>\n"
-        message += "   快速查看最新新聞 (同 /news)\n\n"
-        message += "📊 <b>/status</b>\n"
-        message += "   查看 Bot 運行狀態\n\n"
-        message += "❓ <b>/help</b>\n"
-        message += "   顯示此幫助訊息\n\n"
-        message += "💡 <b>提示</b>\n"
-        message += "Bot 每小時會自動推送新新聞，\n"
-        message += "你也可以隨時用指令主動查詢！"
+💰 <b>總市值:</b> ${total_market_cap:,.0f}
+📊 <b>24h 成交量:</b> ${total_volume:,.0f}
+₿ <b>BTC 市佔率:</b> {btc_dominance:.2f}%
+Ξ <b>ETH 市佔率:</b> {eth_dominance:.2f}%
+🪙 <b>活躍幣種:</b> {active_cryptos:,}
 
-        return message
+<i>更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>
+"""
+            return message.strip()
 
-    def process_command(self, message):
-        """處理用戶指令"""
-        text = message.get('text', '').strip()
+        except Exception as e:
+            return f"❌ 查詢市場概況失敗: {str(e)}"
 
-        if not text.startswith('/'):
-            return None
+    def get_trending(self):
+        """查看熱門幣種"""
+        try:
+            url = f'{self.coingecko_base}/search/trending'
+            response = requests.get(url, timeout=10)
+            data = response.json()
 
-        parts = text.split()
-        command = parts[0].lower()
-        args = parts[1:] if len(parts) > 1 else []
+            coins = data['coins'][:10]  # 前10名
 
-        print(f"🎯 收到指令: {command} {args}")
+            message = "<b>🔥 熱門幣種排行</b>\n\n"
 
-        # 路由到對應的處理函數
-        if command == '/news':
-            count = args[0] if args else 5
-            return self.handle_news_command(count)
+            for idx, item in enumerate(coins, 1):
+                coin = item['item']
+                name = coin['name']
+                symbol = coin['symbol']
+                rank = coin['market_cap_rank']
 
-        elif command == '/latest':
-            return self.handle_news_command(5)
+                message += f"{idx}. <b>{symbol}</b> ({name})\n"
+                if rank:
+                    message += f"   市值排名: #{rank}\n"
+                message += "\n"
 
-        elif command == '/status':
-            return self.handle_status_command()
+            message += f"<i>更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>"
 
-        elif command == '/help' or command == '/start':
-            return self.handle_help_command()
+            return message.strip()
 
-        else:
-            return f"❓ 未知指令: {command}\n使用 /help 查看可用指令"
+        except Exception as e:
+            return f"❌ 查詢熱門幣種失敗: {str(e)}"
 
-    def process_updates(self):
-        """處理所有待處理的更新"""
-        print("\n" + "=" * 70)
-        print("🔍 檢查 Telegram 更新...")
-        print("=" * 70)
+    # ========== 技術分析功能 ==========
 
-        result = self.get_updates()
+    def get_chart(self, symbol='BTC', days=7):
+        """獲取價格走勢圖"""
+        try:
+            coin_map = {
+                'BTC': 'bitcoin',
+                'ETH': 'ethereum',
+                'BNB': 'binancecoin',
+                'SOL': 'solana'
+            }
 
-        if not result or not result.get('ok'):
-            print("❌ 獲取更新失敗")
-            return
+            coin_id = coin_map.get(symbol.upper(), symbol.lower())
 
-        updates = result.get('result', [])
+            # 使用 TradingView 圖表
+            chart_url = f"https://s3.tradingview.com/snapshots/{coin_id.upper()}USDT_{days}d.png"
 
-        if not updates:
-            print("✅ 沒有新訊息")
-            return
+            caption = f"📊 {symbol.upper()} 價格走勢圖 ({days}天)"
 
-        print(f"📬 收到 {len(updates)} 則訊息\n")
+            return {'type': 'photo', 'url': chart_url, 'caption': caption}
 
-        # 處理每個更新
-        for update in updates:
-            update_id = update.get('update_id')
-            message = update.get('message', {})
+        except Exception as e:
+            return f"❌ 獲取圖表失敗: {str(e)}"
 
-            if not message:
-                continue
+    def get_technical_analysis(self, symbol='BTC'):
+        """技術指標分析"""
+        try:
+            coin_map = {
+                'BTC': 'bitcoin',
+                'ETH': 'ethereum',
+                'BNB': 'binancecoin',
+                'SOL': 'solana'
+            }
 
-            from_user = message.get('from', {})
-            username = from_user.get('username', 'Unknown')
-            text = message.get('text', '')
+            coin_id = coin_map.get(symbol.upper(), symbol.lower())
 
-            print(f"📨 訊息 #{update_id} from @{username}: {text}")
+            # 獲取歷史價格數據
+            url = f'{self.coingecko_base}/coins/{coin_id}/market_chart'
+            params = {'vs_currency': 'usd', 'days': '30'}
 
-            # 處理指令
-            response = self.process_command(message)
+            response = requests.get(url, params=params, timeout=10)
+            data = response.json()
 
-            if response:
-                print(f"📤 回覆: {response[:50]}...")
-                self.send_message(response)
-                print("✅ 回覆已發送\n")
+            prices = [p[1] for p in data['prices']]
+            current_price = prices[-1]
 
-            # 標記為已處理 (下次 getUpdates 會跳過這個)
-            self.get_updates(offset=update_id + 1)
+            # 簡單技術指標計算
+            sma_7 = sum(prices[-7:]) / 7
+            sma_30 = sum(prices) / len(prices)
 
-        print("=" * 70)
-        print("✅ 所有訊息處理完成")
-        print("=" * 70)
+            high_30d = max(prices)
+            low_30d = min(prices)
+
+            # 趨勢判斷
+            trend = "📈 上升" if sma_7 > sma_30 else "📉 下降"
+
+            message = f"""
+<b>📈 {symbol.upper()} 技術分析</b>
+
+💰 <b>當前價格:</b> ${current_price:,.2f}
+
+<b>移動平均線:</b>
+• 7日均線: ${sma_7:,.2f}
+• 30日均線: ${sma_30:,.2f}
+
+<b>30天區間:</b>
+• 最高: ${high_30d:,.2f}
+• 最低: ${low_30d:,.2f}
+
+<b>趨勢:</b> {trend}
+
+<i>⚠️ 僅供參考，不構成投資建議</i>
+<i>更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>
+"""
+            return message.strip()
+
+        except Exception as e:
+            return f"❌ 技術分析失敗: {str(e)}"
+
+    # ========== 原有新聞功能 ==========
+
+    def get_news(self, count=5):
+        """獲取最新新聞"""
+        try:
+            news_data = self.news_monitor.fetch_news(count)
+
+            if not news_data or not news_data.get('results'):
+                return "❌ 目前沒有新聞資料"
+
+            message = f"<b>📰 加密貨幣最新新聞 (前 {count} 則)</b>\n\n"
+
+            for idx, news in enumerate(news_data['results'][:count], 1):
+                title = news.get('title', '無標題')
+                url = news.get('url', '')
+                published = news.get('published_at', '')
+                source = news.get('source', {}).get('title', '未知來源')
+
+                message += f"{idx}. <b>{title}</b>\n"
+                message += f"   來源: {source}\n"
+                if url:
+                    message += f"   🔗 <a href='{url}'>閱讀全文</a>\n"
+                message += "\n"
+
+            return message.strip()
+
+        except Exception as e:
+            return f"❌ 獲取新聞失敗: {str(e)}"
+
+    def get_help(self):
+        """獲取幫助信息"""
+        return """
+🤖 <b>Crypto Trading Bot 指令列表</b>
+
+<b>📰 新聞資訊</b>
+/news [數量] - 查詢最新加密貨幣新聞
+/latest - 快速查看最新 5 則新聞
+
+<b>📊 市場數據</b>
+/price [幣種] - 查詢即時價格 (如: /price BTC)
+/market - 查看市場概況
+/trending - 熱門幣種排行
+
+<b>📈 技術分析</b>
+/chart [幣種] - 查看價格走勢圖
+/analysis [幣種] - 技術指標分析
+
+<b>⚙️ 個人設定</b>
+/subscribe [幣種] - 訂閱價格提醒
+/unsubscribe [幣種] - 取消訂閱
+/mysubs - 查看我的訂閱
+
+<b>ℹ️ 系統</b>
+/status - Bot 運行狀態
+/help - 顯示此幫助訊息
+
+<i>💡 提示：正在開發更多功能中...</i>
+"""
+
+    def get_status(self):
+        """獲取 Bot 狀態"""
+        return f"""
+<b>🤖 Bot 運行狀態</b>
+
+✅ <b>狀態:</b> 正常運行
+📡 <b>連線:</b> 已連接
+⏰ <b>時間:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+<b>可用功能:</b>
+✅ 新聞查詢
+✅ 價格查詢
+✅ 市場數據
+✅ 技術分析
+🚧 訂閱提醒 (開發中)
+"""
+
+    # ========== 訂閱管理 (待實作) ==========
+
+    def subscribe_coin(self, symbol):
+        """訂閱幣種價格提醒 - 待實作"""
+        return f"✅ 已訂閱 {symbol.upper()} 價格提醒\n\n🚧 此功能正在開發中，敬請期待！"
+
+    def unsubscribe_coin(self, symbol):
+        """取消訂閱 - 待實作"""
+        return f"✅ 已取消訂閱 {symbol.upper()}\n\n🚧 此功能正在開發中，敬請期待！"
+
+    def get_subscriptions(self):
+        """查看訂閱列表 - 待實作"""
+        return "📋 <b>我的訂閱</b>\n\n🚧 此功能正在開發中，敬請期待！"
 
 
-def main():
-    """主程式 - 檢查並處理 Telegram 指令"""
+def process_command(message):
+    """處理 Telegram 指令"""
     handler = TelegramCommandHandler()
-    handler.process_updates()
+
+    text = message.get('text', '').strip()
+    parts = text.split()
+    command = parts[0].lower()
+    args = parts[1:] if len(parts) > 1 else []
+
+    # 新聞指令
+    if command == '/news':
+        count = int(args[0]) if args and args[0].isdigit() else 5
+        response = handler.get_news(count)
+        handler.send_message(response)
+
+    elif command == '/latest':
+        response = handler.get_news(5)
+        handler.send_message(response)
+
+    # 市場數據指令
+    elif command == '/price':
+        symbol = args[0] if args else 'BTC'
+        response = handler.get_price(symbol)
+        handler.send_message(response)
+
+    elif command == '/market':
+        response = handler.get_market_overview()
+        handler.send_message(response)
+
+    elif command == '/trending':
+        response = handler.get_trending()
+        handler.send_message(response)
+
+    # 技術分析指令
+    elif command == '/chart':
+        symbol = args[0] if args else 'BTC'
+        result = handler.get_chart(symbol)
+        if isinstance(result, dict) and result.get('type') == 'photo':
+            handler.send_photo(result['url'], result['caption'])
+        else:
+            handler.send_message(result)
+
+    elif command == '/analysis':
+        symbol = args[0] if args else 'BTC'
+        response = handler.get_technical_analysis(symbol)
+        handler.send_message(response)
+
+    # 訂閱管理指令
+    elif command == '/subscribe':
+        symbol = args[0] if args else ''
+        if not symbol:
+            response = "❌ 請指定幣種，例如: /subscribe BTC"
+        else:
+            response = handler.subscribe_coin(symbol)
+        handler.send_message(response)
+
+    elif command == '/unsubscribe':
+        symbol = args[0] if args else ''
+        if not symbol:
+            response = "❌ 請指定幣種，例如: /unsubscribe BTC"
+        else:
+            response = handler.unsubscribe_coin(symbol)
+        handler.send_message(response)
+
+    elif command == '/mysubs':
+        response = handler.get_subscriptions()
+        handler.send_message(response)
+
+    # 系統指令
+    elif command == '/help':
+        response = handler.get_help()
+        handler.send_message(response)
+
+    elif command == '/status':
+        response = handler.get_status()
+        handler.send_message(response)
+
+    else:
+        response = f"❌ 未知指令: {command}\n\n請輸入 /help 查看可用指令"
+        handler.send_message(response)
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    # 測試模式
+    print("Telegram Bot 指令處理器已啟動")
