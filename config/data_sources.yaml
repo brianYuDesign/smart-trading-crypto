@@ -1,0 +1,142 @@
+# Smart Trading Crypto - 數據源配置文件
+# 此文件配置所有外部數據源的 API 連接
+
+# ==================== 加密貨幣數據源 ====================
+
+crypto_apis:
+  # CoinGecko - 加密貨幣市場數據
+  coingecko:
+    enabled: true
+    api_key: null  # 免費版不需要密鑰，Pro 版請填入
+    rate_limit: 50  # 每分鐘請求限制（免費版: 50, Pro: 500）
+    pro: false  # 是否為 Pro 版本
+    
+  # CoinMarketCap (可選)
+  coinmarketcap:
+    enabled: false
+    api_key: null  # 需要註冊: https://coinmarketcap.com/api/
+    rate_limit: 333  # 基礎計劃: 333 calls/day
+
+# ==================== 新聞數據源 ====================
+
+news_apis:
+  # CryptoPanic - 加密貨幣新聞聚合
+  cryptopanic:
+    enabled: true
+    api_key: YOUR_CRYPTOPANIC_KEY  # 註冊獲取: https://cryptopanic.com/developers/api/
+    filter:
+      currencies: [BTC, ETH, BNB, SOL, XRP]  # 監控的幣種
+      regions: [en]  # 語言區域
+      kind: news  # news | media | all
+    
+  # NewsAPI (可選) - 全球新聞
+  newsapi:
+    enabled: false
+    api_key: null  # 註冊獲取: https://newsapi.org/
+    sources:
+      - coindesk
+      - cointelegraph
+      - decrypt
+    keywords:
+      - bitcoin
+      - ethereum
+      - cryptocurrency
+      - crypto regulation
+      - blockchain
+
+# ==================== 社交媒體數據源 ====================
+
+social_media:
+  # Twitter/X (需要付費 API)
+  twitter:
+    enabled: false
+    api_key: null
+    monitored_accounts:
+      - elonmusk
+      - cz_binance
+      - VitalikButerin
+      - michael_saylor
+  
+  # Reddit
+  reddit:
+    enabled: false
+    client_id: null
+    client_secret: null
+    subreddits:
+      - cryptocurrency
+      - bitcoin
+      - ethereum
+      - cryptomarkets
+      - defi
+
+# ==================== 宏觀經濟數據源 ====================
+
+macro_data:
+  # FRED - 美國聯邦儲備經濟數據
+  fred:
+    enabled: false
+    api_key: null  # 註冊獲取: https://fred.stlouisfed.org/docs/api/api_key.html
+    series:
+      - DFF      # Federal Funds Rate (利率)
+      - UNRATE   # Unemployment Rate (失業率)
+      - CPIAUCSL # Consumer Price Index (CPI)
+      - GDP      # Gross Domestic Product (GDP)
+
+# ==================== 更新間隔設置 ====================
+
+update_intervals:
+  market_data: 300     # 5分鐘 - 市場價格和數據
+  news: 600            # 10分鐘 - 新聞和事件
+  knowledge: 3600      # 1小時 - 知識庫維護
+  snapshots: 86400     # 24小時 - 市場快照
+  correlations: 604800 # 7天 - 相關性計算
+
+# ==================== 知識庫設置 ====================
+
+knowledge_base:
+  database_path: data/knowledge_base/market_knowledge.db
+  
+  # 數據保留策略
+  retention:
+    news_archive_days: 90      # 新聞保留90天
+    market_snapshots_days: 365 # 快照保留1年
+    events_days: 1825          # 事件保留5年
+  
+  # 自動清理
+  auto_cleanup:
+    enabled: true
+    schedule: "0 2 * * *"  # 每天凌晨2點執行清理
+
+# ==================== 通知設置 ====================
+
+notifications:
+  # 更新失敗通知
+  on_update_failure: true
+  
+  # API 限流警告
+  on_rate_limit: true
+  
+  # 數據庫大小警告閾值（MB）
+  db_size_warning_mb: 500
+
+# ==================== 重試和容錯設置 ====================
+
+error_handling:
+  # API 請求重試
+  max_retries: 3
+  retry_delay: 5  # 秒
+  
+  # 超時設置
+  timeout: 10  # 秒
+  
+  # 失敗後的回退策略
+  fallback_to_cache: true
+  cache_ttl: 3600  # 緩存有效期（秒）
+
+# ==================== 日誌設置 ====================
+
+logging:
+  level: INFO  # DEBUG | INFO | WARNING | ERROR
+  file: logs/knowledge_update.log
+  max_size_mb: 10
+  backup_count: 5
