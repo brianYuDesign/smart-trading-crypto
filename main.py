@@ -1,55 +1,44 @@
+#!/usr/bin/env python3
 """
-Smart Trading Crypto - 主程式（整合版）
-整合市場分析、新聞監控、信號生成和 Telegram 指令處理
+Crypto Trading Bot - 主程式
+支援兩種模式:
+1. commands: Telegram 指令模式 (webhook)
+2. monitoring: 定時監控分析模式
 """
+
 import os
-import yaml
-from datetime import datetime
+import sys
+import logging
+from pathlib import Path
+from src.telegram_commands import TelegramCommandHandler
 from src.market_analyzer import MarketAnalyzer
 from src.news_monitor import NewsMonitor
-from src.signal_generator import SignalGenerator
 from src.notifier import TelegramNotifier
-from src.telegram_commands import TelegramCommandHandler  # 新增：指令處理器
-import logging
-import time
 
+# 設定日誌
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_path: str = 'config/config.yaml') -> dict:
-    """載入配置文件"""
+def run_command_mode():
+    """
+    執行 Telegram 指令模式
+    啟動 webhook server 等待用戶指令
+    """
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        logger.info("配置文件載入成功")
-        return config
-    except Exception as e:
-        logger.error(f"載入配置文件失敗: {e}")
-        raise
+        logger.info("=" * 60)
+        logger.info("🤖 Crypto Trading Bot - 指令模式")
+        logger.info("=" * 60)
 
-
-def run_bot_with_commands():
-    """運行帶有指令處理的 Bot"""
-    logger.info("=" * 60)
-    logger.info("Smart Trading Crypto Bot 啟動（指令模式）")
-    logger.info("=" * 60)
-    
-    try:
-        # 從環境變數獲取 Token
-        bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-        chat_id = os.getenv('TELEGRAM_CHAT_ID')
-        
-        if not bot_token or not chat_id:
-            logger.error("❌ 請設定 TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 環境變數")
-            return
-        
         # 初始化指令處理器
         command_handler = TelegramCommandHandler()
-        
+
         logger.info("✅ Bot 指令處理器已啟動")
         logger.info("📱 等待 Telegram 指令...")
         logger.info("")
@@ -61,94 +50,126 @@ def run_bot_with_commands():
         logger.info("  /analysis <幣種> - 技術分析")
         logger.info("  /help - 查看所有指令")
         logger.info("=" * 60)
-        
-        # 處理指令（單次執行）
-        command_handler.process_commands()
-        
+
+        # Webhook 模式：由 webhook_server.py 處理請求
+        # 這裡只需要保持進程運行
+        logger.info("✓ Webhook 服務已就緒，等待請求...")
+
+        # 保持運行（在 webhook 模式下，gunicorn 會管理進程）
+        import time
+        while True:
+            time.sleep(60)
+
+    except KeyboardInterrupt:
+        logger.info("\n👋 Bot 已停止")
     except Exception as e:
-        logger.error(f"❌ Bot 運行錯誤: {e}")
-        raise
+        logger.error(f"❌ 指令模式發生錯誤: {e}", exc_info=True)
+        sys.exit(1)
 
 
 def run_monitoring_and_analysis():
-    """運行市場監控和分析（原有功能）"""
-    logger.info("=" * 60)
-    logger.info("Smart Trading Crypto 系統啟動")
-    logger.info("=" * 60)
-    
+    """
+    執行監控和分析模式
+    定時檢查市場並發送報告
+    """
     try:
-        # 載入配置
-        config = load_config()
-        
-        # 初始化各個模組
-        market_analyzer = MarketAnalyzer(config)
-        news_monitor = NewsMonitor(config)
-        signal_generator = SignalGenerator(config)
-        notifier = TelegramNotifier(config)
-        
-        # 發送系統啟動通知
+        logger.info("=" * 60)
+        logger.info("📊 開始市場監控與分析")
+        logger.info("=" * 60)
+
+        # 初始化組件
+        config = {
+            'data_dir': 'data',
+            'update_interval': 300
+        }
+
+        notifier = TelegramNotifier()
+        market_analyzer = MarketAnalyzer()
+        news_monitor = NewsMonitor(config['data_dir'])
+
         notifier.notify_system_status('started', '系統開始分析市場')
-        
+
         # 1. 檢查新聞風險
         logger.info("\n--- 步驟 1: 檢查新聞風險 ---")
-        news_safety = news_monitor.is_safe_to_trade()
-        
-        if not news_safety['safe_to_trade']:
-            logger.warning(f"新聞風險警報: {news_safety['reason']}")
-            notifier.notify_risk_alert('news', news_safety)
-            logger.info("由於新聞風險，停止交易信號分析")
-            return
-        
-        logger.info("✓ 新聞檢查通過")
-        
-        # 2. 檢查市場穩定性
-        logger.info("\n--- 步驟 2: 檢查市場穩定性 ---")
-        market_stability = market_analyzer.is_market_stable()
-        market_conditions = market_stability['market_conditions']
-        
-        if not market_stability['stable']:
-            logger.warning(f"市場穩定性警報: {market_stability['reason']}")
-            notifier.notify_risk_alert('volatility', market_conditions)
-            logger.info("由於市場波動，停止交易信號分析")
-            return
-            
-        logger.info("✓ 市場穩定性檢查通過")
-        
+        try:
+            news_safety = news_monitor.is_safe_to_trade()
+
+            if not news_safety.get('safe_to_trade', True):
+                reason = news_safety.get('reason', '未知原因')
+                logger.warning(f"新聞風險警報: {reason}")
+
+                # 發送風險警報
+                try:
+                    notifier.notify_risk_alert('news', news_safety)
+                except Exception as e:
+                    logger.error(f"發送新聞風險警報失敗: {e}")
+
+                logger.info("由於新聞風險，停止交易信號分析")
+                return
+            else:
+                logger.info(f"✓ 新聞環境正常: {news_safety.get('reason', '')}")
+
+        except Exception as e:
+            logger.error(f"新聞風險檢查失敗: {e}", exc_info=True)
+            logger.info("⚠️ 新聞檢查失敗，繼續其他分析...")
+
+        # 2. 分析市場條件
+        logger.info("\n--- 步驟 2: 分析市場條件 ---")
+        try:
+            market_conditions = market_analyzer.analyze_market_conditions()
+
+            # 檢查市場波動性
+            if market_conditions.get('volatility', 0) > 0.05:
+                logger.warning(f"高波動性警報: {market_conditions.get('volatility', 0):.2%}")
+                try:
+                    notifier.notify_risk_alert('volatility', market_conditions)
+                except Exception as e:
+                    logger.error(f"發送波動性警報失敗: {e}")
+
+            logger.info(f"✓ 市場條件: {market_conditions.get('condition', 'unknown')}")
+
+        except Exception as e:
+            logger.error(f"市場分析失敗: {e}", exc_info=True)
+            logger.info("⚠️ 市場分析失敗，繼續其他分析...")
+
         # 3. 生成交易信號
         logger.info("\n--- 步驟 3: 生成交易信號 ---")
-        signals = signal_generator.generate_signals()
-        
-        if signals:
-            logger.info(f"✓ 生成 {len(signals)} 個交易信號")
-            notifier.notify_trading_signals(signals)
-        else:
-            logger.info("目前沒有符合條件的交易信號")
-        
-        # 發送系統完成通知
-        notifier.notify_system_status('completed', '分析完成')
+        try:
+            # 這裡可以添加交易信號生成邏輯
+            logger.info("交易信號生成功能待實現")
+
+        except Exception as e:
+            logger.error(f"信號生成失敗: {e}", exc_info=True)
+
         logger.info("\n" + "=" * 60)
-        logger.info("系統分析完成")
+        logger.info("✅ 分析完成")
         logger.info("=" * 60)
-        
+
+        notifier.notify_system_status('completed', '市場分析已完成')
+
     except Exception as e:
-        logger.error(f"系統運行錯誤: {e}")
-        raise
+        logger.error(f"❌ 執行過程中發生錯誤: {e}", exc_info=True)
+        try:
+            notifier = TelegramNotifier()
+            notifier.notify_system_status('error', f'系統錯誤: {str(e)}')
+        except:
+            pass
+        sys.exit(1)
 
 
 def main():
     """主程式入口"""
-    # 判斷運行模式
-    mode = os.getenv('BOT_MODE', 'commands')  # 預設為指令模式
-    
-    if mode == 'commands':
-        # 指令處理模式（用於 GitHub Actions 或定時執行）
-        run_bot_with_commands()
-    elif mode == 'monitoring':
-        # 監控分析模式（原有功能）
+    # 獲取運行模式
+    bot_mode = os.getenv('BOT_MODE', 'commands').lower()
+
+    if bot_mode == 'commands':
+        run_command_mode()
+    elif bot_mode == 'monitoring':
         run_monitoring_and_analysis()
     else:
-        logger.error(f"未知的運行模式: {mode}")
+        logger.error(f"❌ 未知的 BOT_MODE: {bot_mode}")
         logger.info("請設定 BOT_MODE 環境變數為 'commands' 或 'monitoring'")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
