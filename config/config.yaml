@@ -1,0 +1,87 @@
+# 交易配置
+trading:
+  # 交易對
+  symbol: "BTCUSDT"
+  # 分析時間框架
+  timeframe: "15m"
+  # 數據量
+  lookback_periods: 100
+
+# 技術指標參數
+indicators:
+  rsi:
+    period: 14
+    oversold: 30
+    overbought: 70
+  macd:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  bollinger_bands:
+    period: 20
+    std_dev: 2
+  volume:
+    surge_threshold: 1.5  # 成交量放大倍數
+
+# 風險管理
+risk_management:
+  # 市場波動率閾值（超過則暫停交易）
+  volatility_threshold: 0.05
+  # 新聞事件冷卻期（小時）
+  news_cooldown_hours: 24
+  # 重大數據公布前後暫停時間（小時）
+  data_release_buffer_hours: 2
+
+# 新聞監控
+news_monitoring:
+  # 關鍵字過濾
+  keywords:
+    - "Trump"
+    - "川普"
+    - "Federal Reserve"
+    - "聯準會"
+    - "inflation"
+    - "通膨"
+    - "war"
+    - "戰爭"
+    - "ban"
+    - "禁令"
+    - "regulation"
+    - "監管"
+  # 新聞來源
+  sources:
+    - "https://cryptopanic.com/api/v1/posts/"
+    - "https://www.coindesk.com/arc/outboundfeeds/rss/"
+  # 檢查間隔（分鐘）
+  check_interval: 60
+
+# Telegram 通知
+telegram:
+  # 通知類型
+  notify_on:
+    - "buy_signal"
+    - "sell_signal"
+    - "risk_alert"
+    - "news_alert"
+  # 訊息模板
+  message_template: |
+    🤖 <b>交易信號</b>
+    
+    📊 交易對: {symbol}
+    📈 信號類型: {signal_type}
+    💰 當前價格: ${price}
+    
+    📉 技術指標:
+    • RSI: {rsi}
+    • MACD: {macd}
+    
+    {additional_info}
+    
+    ⏰ 時間: {timestamp}
+
+# GitHub Actions 排程
+schedule:
+  # 市場分析頻率（cron 格式）
+  market_analysis: "*/15 * * * *"  # 每 15 分鐘
+  # 新聞檢查頻率
+  news_check: "0 * * * *"  # 每小時
