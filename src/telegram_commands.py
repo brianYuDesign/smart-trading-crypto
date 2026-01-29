@@ -36,7 +36,7 @@ Telegram Bot 指令處理模組 V3 - 完整增強版
 import os
 import requests
 from datetime import datetime
-from news_monitor import NewsMonitor
+from src.news_monitor import NewsMonitor
 from market_data import MarketDataAPI, MarketDataFormatter
 
 class TelegramCommandHandler:
