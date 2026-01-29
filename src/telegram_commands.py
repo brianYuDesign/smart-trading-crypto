@@ -39,15 +39,18 @@ from datetime import datetime
 from src.news_monitor import NewsMonitor
 from src.market_data import MarketDataAPI, MarketDataFormatter
 
+from src.user_manager import UserManager
+
 class TelegramCommandHandler:
     def __init__(self):
         self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
         self.news_monitor = NewsMonitor()
         self.market_api = MarketDataAPI()
         self.formatter = MarketDataFormatter()
+        self.user_manager = UserManager()
         
-        # 訂閱數據 (之後可移到資料庫)
-        self.subscriptions = {}
+        # 訂閱數據 (使用資料庫)
+        # self.subscriptions = {}
         
     def handle_command(self, message):
         """處理 Telegram 指令"""
@@ -363,16 +366,11 @@ class TelegramCommandHandler:
         symbol = args[0].upper()
         condition = ' '.join(args[1:]) if len(args) > 1 else None
         
-        # 儲存訂閱 (暫時存在記憶體中)
-        if chat_id not in self.subscriptions:
-            self.subscriptions[chat_id] = []
+        # 儲存訂閱 (使用資料庫)
+        success = self.user_manager.add_subscription(chat_id, symbol, condition)
         
-        sub = {
-            'symbol': symbol,
-            'condition': condition,
-            'created_at': datetime.now().isoformat()
-        }
-        self.subscriptions[chat_id].append(sub)
+        if not success:
+            return self.send_message(chat_id, "❌ 訂閱失敗，請稍後再試")
         
         message = f"✅ 已訂閱 <b>{symbol}</b>"
         if condition:
@@ -391,18 +389,10 @@ class TelegramCommandHandler:
         
         symbol = args[0].upper()
         
-        if chat_id not in self.subscriptions:
-            return self.send_message(chat_id, "❌ 你還沒有任何訂閱")
-        
         # 移除訂閱
-        original_count = len(self.subscriptions[chat_id])
-        self.subscriptions[chat_id] = [
-            sub for sub in self.subscriptions[chat_id]
-            if sub['symbol'] != symbol
-        ]
-        removed_count = original_count - len(self.subscriptions[chat_id])
+        removed = self.user_manager.remove_subscription(chat_id, symbol)
         
-        if removed_count > 0:
+        if removed:
             return self.send_message(
                 chat_id,
                 f"✅ 已取消 <b>{symbol}</b> 的訂閱",
@@ -416,7 +406,9 @@ class TelegramCommandHandler:
     
     def cmd_mysubs(self, chat_id, args):
         """查看訂閱清單"""
-        if chat_id not in self.subscriptions or not self.subscriptions[chat_id]:
+        subs = self.user_manager.get_user_subscriptions(chat_id)
+        
+        if not subs:
             return self.send_message(
                 chat_id,
                 "📋 你還沒有任何訂閱\n\n"
@@ -425,7 +417,7 @@ class TelegramCommandHandler:
         
         message = "📋 <b>我的訂閱清單</b>\n\n"
         
-        for i, sub in enumerate(self.subscriptions[chat_id], 1):
+        for i, sub in enumerate(subs, 1):
             symbol = sub['symbol']
             condition = sub.get('condition', '即時價格更新')
             
@@ -505,7 +497,7 @@ class TelegramCommandHandler:
             message = "🔧 <b>Bot 運行狀態</b>\n\n"
             message += f"📊 市場數據 API: {'✅ 正常' if market_ok else '❌ 異常'}\n"
             message += f"📰 新聞 API: {'✅ 正常' if news_ok else '❌ 異常'}\n"
-            message += f"⏰ 訂閱數量: {len(self.subscriptions.get(chat_id, []))}\n"
+            message += f"⏰ 訂閱數量: {len(self.user_manager.get_user_subscriptions(chat_id))}\n"
             message += f"\n🕐 系統時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             
             return self.send_message(chat_id, message, parse_mode='HTML')

@@ -5,7 +5,11 @@ Flask Web Server for Telegram Webhook
 from flask import Flask, request, jsonify
 import os
 import logging
-from telegram_commands import TelegramBot
+from dotenv import load_dotenv
+from src.telegram_commands import TelegramCommandHandler
+
+# 載入環境變數
+load_dotenv()
 
 # 設定日誌
 logging.basicConfig(
@@ -22,9 +26,10 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
     logger.error("Missing required environment variables: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
-    raise ValueError("Missing required environment variables")
+    # raise ValueError("Missing required environment variables") 
 
-bot = TelegramBot(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+# 初始化 Handler
+bot = TelegramCommandHandler()
 
 @app.route('/')
 def home():
@@ -85,7 +90,7 @@ def webhook():
 
         # 使用 TelegramBot 的指令處理邏輯
         command = text.split()[0].lower()
-        response = bot.handle_webhook_command(command, message)
+        response = bot.handle_command(message)
 
         logger.info(f"Command processed successfully: {command}")
 
@@ -135,6 +140,6 @@ def set_webhook():
         }), 500
 
 if __name__ == '__main__':
-    # 本地測試用
-    port = int(os.getenv('PORT', 5000))
+    # 本地測試用 (使用 5001 避免 macOS AirPlay 衝突)
+    port = int(os.getenv('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=False)
