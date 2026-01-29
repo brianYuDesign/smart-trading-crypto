@@ -55,7 +55,7 @@ def main():
         
         if not news_safety['safe_to_trade']:
             logger.warning(f"新聞風險警報: {news_safety['reason']}")
-            notifier.notify_risk_alert('news', news_safety.get('high_risk_news', {}))
+            notifier.notify_risk_alert('news', news_safety)
             logger.info("由於新聞風險，停止交易信號分析")
             return
         
