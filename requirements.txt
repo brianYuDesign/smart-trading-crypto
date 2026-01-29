@@ -1,5 +1,5 @@
 Flask==3.0.0
 requests==2.31.0
-feedparser==6.0.10
-pytz==2024.1
+feedparser==6.0.11
+pytz==2024.2
 gunicorn==21.2.0
