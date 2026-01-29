@@ -236,3 +236,60 @@ if __name__ == "__main__":
         print("Telegram 訊息預覽")
         print("=" * 70)
         print(message)
+
+    def is_safe_to_trade(self):
+        """
+        檢查當前新聞環境是否適合交易
+
+        Returns:
+            dict: {
+                'safe_to_trade': bool,
+                'reason': str,
+                'high_risk_news': list
+            }
+        """
+        try:
+            # 獲取最新新聞
+            all_news = self.fetch_all_news()
+
+            if not all_news:
+                return {
+                    'safe_to_trade': True,
+                    'reason': '無新聞數據',
+                    'high_risk_news': []
+                }
+
+            # 篩選高風險關鍵詞
+            high_risk_keywords = [
+                'hack', 'hacked', 'exploit', 'crash', 'ban', 'regulation',
+                'sec', 'lawsuit', 'fraud', 'scam', 'collapse', 'bankrupt'
+            ]
+
+            high_risk_news = []
+            for news in all_news[:20]:  # 只檢查最新20條
+                title_lower = news.get('title', '').lower()
+                if any(keyword in title_lower for keyword in high_risk_keywords):
+                    high_risk_news.append(news)
+
+            # 如果有3條以上高風險新聞，建議暫停交易
+            if len(high_risk_news) >= 3:
+                return {
+                    'safe_to_trade': False,
+                    'reason': f'檢測到 {len(high_risk_news)} 條高風險新聞',
+                    'high_risk_news': high_risk_news
+                }
+
+            return {
+                'safe_to_trade': True,
+                'reason': '新聞環境正常',
+                'high_risk_news': high_risk_news
+            }
+
+        except Exception as e:
+            # 如果新聞檢查失敗，預設為安全（不阻止交易）
+            print(f"⚠️ 新聞安全檢查失敗: {e}")
+            return {
+                'safe_to_trade': True,
+                'reason': f'新聞檢查失敗: {str(e)}',
+                'high_risk_news': []
+            }
