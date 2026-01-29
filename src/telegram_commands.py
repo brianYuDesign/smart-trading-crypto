@@ -539,3 +539,59 @@ class TelegramCommandHandler:
         except Exception as e:
             print(f"發送訊息失敗: {str(e)}")
             return None
+
+
+    def process_commands(self):
+        """
+        處理 Telegram 指令（單次執行模式）
+        從 Telegram 獲取最新更新並處理指令
+        """
+        try:
+            # 獲取最新的更新
+            url = f'https://api.telegram.org/bot{self.bot_token}/getUpdates'
+            response = requests.get(url, params={'timeout': 10, 'limit': 10})
+
+            if response.status_code != 200:
+                print(f"❌ 獲取更新失敗: {response.status_code}")
+                return
+
+            data = response.json()
+
+            if not data.get('ok'):
+                print(f"❌ Telegram API 錯誤: {data}")
+                return
+
+            updates = data.get('result', [])
+
+            if not updates:
+                print("ℹ️ 沒有新的指令")
+                return
+
+            print(f"📨 收到 {len(updates)} 個更新")
+
+            # 處理每個更新
+            for update in updates:
+                if 'message' in update:
+                    message = update['message']
+                    text = message.get('text', '')
+
+                    if text.startswith('/'):
+                        print(f"\n處理指令: {text}")
+                        response = self.handle_command(message)
+
+                        if response:
+                            chat_id = message.get('chat', {}).get('id')
+                            self.send_message(chat_id, response)
+                            print(f"✅ 已回應")
+
+            # 標記更新為已讀（使用最後一個 update_id + 1）
+            if updates:
+                last_update_id = updates[-1]['update_id']
+                confirm_url = f'https://api.telegram.org/bot{self.bot_token}/getUpdates'
+                requests.get(confirm_url, params={'offset': last_update_id + 1, 'limit': 1})
+                print(f"\n✅ 已處理並確認 {len(updates)} 個更新")
+
+        except Exception as e:
+            print(f"❌ 處理指令時發生錯誤: {e}")
+            import traceback
+            traceback.print_exc()
