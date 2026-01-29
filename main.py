@@ -31,6 +31,25 @@ def load_config(config_path: str = 'config/config.yaml') -> dict:
 
 
 def main():
+    # 初始化新聞監控
+    news_monitor = NewsMonitor()
+
+    # 檢查新新聞
+    print("\n" + "="*70)
+    print("📰 檢查加密貨幣新聞")
+    print("="*70)
+
+    new_news = news_monitor.monitor_news()
+
+    # 只在有新新聞時發送提醒
+    if new_news:
+        news_message = news_monitor.format_news_message(new_news)
+        if news_message:
+            send_telegram_message(news_message)
+            print(f"✅ 已發送 {len(new_news)} 則新新聞提醒到 Telegram")
+    else:
+        print("✅ 沒有新新聞，不發送提醒")
+
     """主程序"""
     logger.info("=" * 60)
     logger.info("Smart Trading Crypto 系統啟動")
