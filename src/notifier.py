@@ -170,7 +170,7 @@ class TelegramNotifier:
             message = f"""
 ⚠️ <b>新聞風險警報</b>
 
-🚨 檢測到 {details['high_risk_count']} 個高風險新聞事件
+🚨 檢測到 {len(details['high_risk_news'])} 個高風險新聞事件
 
 <b>主要新聞:</b>
 {news_items}
