@@ -1,18 +1,4 @@
-# Web Framework
 Flask==3.0.0
-gunicorn==21.2.0
-
-# HTTP Requests
 requests==2.31.0
-
-# RSS Feed Parser (upgraded for Python 3.13 support)
-feedparser==6.0.11
-
-# Timezone support
-pytz==2024.1
-
-# Telegram Bot (if needed)
-python-telegram-bot==20.7
-
-# Data Processing
-python-dateutil==2.8.2
+feedparser==6.0.10
+pytz==2023.3
