@@ -57,7 +57,31 @@ class DatabaseManager:
             
             if 'timezone' not in columns:
                 logger.info("遷移: 為 users 表添加 timezone 欄位")
+                logger.info("遷移: 為 users 表添加 timezone 欄位")
+                logger.info("遷移: 為 users 表添加 timezone 欄位")
                 cursor.execute("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'Asia/Taipei'")
+            
+            if 'is_active' not in columns:
+                logger.info("遷移: 為 users 表添加 is_active 欄位")
+                cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+
+            # 2. 檢查 user_risk_profiles 表是否需要 notification_frequency 欄位
+            # 先檢查表是否存在
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_risk_profiles'")
+            if cursor.fetchone():
+                cursor.execute("PRAGMA table_info(user_risk_profiles)")
+                rp_columns = [info[1] for info in cursor.fetchall()]
+                
+                if 'notification_frequency' not in rp_columns:
+                    logger.info("遷移: 為 user_risk_profiles 表添加 notification_frequency 欄位")
+                if 'notification_frequency' not in rp_columns:
+                    logger.info("遷移: 為 user_risk_profiles 表添加 notification_frequency 欄位")
+                    cursor.execute("ALTER TABLE user_risk_profiles ADD COLUMN notification_frequency TEXT DEFAULT '4h'")
+
+                if 'is_current' not in rp_columns:
+                    logger.info("遷移: 為 user_risk_profiles 表添加 is_current 欄位")
+                    cursor.execute("ALTER TABLE user_risk_profiles ADD COLUMN is_current INTEGER DEFAULT 1")
+
             
             conn.commit()
             conn.close()
