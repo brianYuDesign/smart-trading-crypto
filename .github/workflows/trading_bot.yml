@@ -2,8 +2,8 @@ name: Smart Trading Crypto Bot
 
 on:
   schedule:
-    - cron: '*/2 * * * *'  # 每 2 分鍾執行一次
-  workflow_dispatch:  # 允許手動執行
+    - cron: '*/5 * * * *'  # 每 5 分鐘執行一次 (從2分鐘調整為5分鐘)
+  workflow_dispatch:  # 允許手動觸發
 
 jobs:
   run-bot:
@@ -23,8 +23,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Run Smart Trading Bot
+    - name: Run Smart Trading Bot - Monitoring Mode
       env:
+        BOT_MODE: monitoring  # 明確指定監控模式
         BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
         BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
