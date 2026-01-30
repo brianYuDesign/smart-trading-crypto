@@ -198,10 +198,10 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 
                 cursor.execute("""
-                    SELECT id, symbol, position_type, entry_price, exit_price,
-                           position_size, stop_loss, take_profit, status,
+                    SELECT position_id, symbol, status, entry_price, exit_price,
+                           quantity, entry_reason, exit_reason,
                            entry_time, exit_time, profit_loss
-                    FROM positions
+                    FROM user_positions
                     WHERE user_id = ? AND status = ?
                     ORDER BY exit_time DESC
                 """, (user_id, status))
@@ -209,18 +209,15 @@ class DatabaseManager:
                 positions = []
                 for row in cursor.fetchall():
                     positions.append({
-                        'id': row[0],
-                        'symbol': row[1],
-                        'position_type': row[2],
-                        'entry_price': row[3],
-                        'exit_price': row[4],
-                        'position_size': row[5],
-                        'stop_loss': row[6],
-                        'take_profit': row[7],
-                        'status': row[8],
-                        'entry_time': row[9],
-                        'exit_time': row[10],
-                        'profit_loss': row[11]
+                        'id': row['position_id'],
+                        'symbol': row['symbol'],
+                        'status': row['status'],
+                        'entry_price': row['entry_price'],
+                        'exit_price': row['exit_price'],
+                        'quantity': row['quantity'],
+                        'entry_time': row['entry_time'],
+                        'exit_time': row['exit_time'],
+                        'profit_loss': row['profit_loss']
                     })
                 
                 conn.close()
@@ -523,7 +520,7 @@ class DatabaseManager:
             cursor.execute('''
                 UPDATE market_watchlist 
                 SET is_active = 0 
-                WHERE id = ? AND user_id = ?
+                WHERE watchlist_id = ? AND user_id = ?
             ''', (watchlist_id, user_id))
             
             conn.commit()

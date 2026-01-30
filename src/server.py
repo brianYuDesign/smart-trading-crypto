@@ -89,49 +89,85 @@ def get_user_timezone(user_id):
     return 'Asia/Taipei'
 
 
-def fetch_crypto_price_multi_source(crypto_id):
-    """多重來源獲取價格（保留原本邏輯）"""
-    # 1. CoinGecko
+def fetch_crypto_price_multi_source(query):
+    """多重來源獲取價格 (支援 CoinGecko 與 Binance)"""
+    query = query.lower().strip()
+    
+    # 常見幣種映射表 (Ticker -> CoinGecko ID)
+    # 用戶輸入可能是 ticker (btc) 也可能是 id (bitcoin)
+    TICKER_MAP = {
+        'btc': 'bitcoin',
+        'eth': 'ethereum',
+        'sol': 'solana',
+        'bnb': 'binancecoin',
+        'xrp': 'ripple',
+        'ada': 'cardano',
+        'doge': 'dogecoin',
+        'avax': 'avalanche-2',
+        'dot': 'polkadot',
+        'matic': 'matic-network',
+        'link': 'chainlink',
+        'ltc': 'litecoin',
+        'uni': 'uniswap',
+        'atom': 'cosmos',
+        'etc': 'ethereum-classic',
+        'xlm': 'stellar',
+        'trx': 'tron',
+        'busd': 'binance-usd',
+        'shib': 'shiba-inu'
+    }
+    
+    # 決定 CoinGecko 使用的 ID
+    # 如果輸入是 ticker (如 btc)，轉為 bitcoin
+    # 如果輸入已是全名 (如 bitcoin)，保持不變 (TICKER_MAP.get('bitcoin', 'bitcoin') -> 'bitcoin')
+    cg_id = TICKER_MAP.get(query, query)
+    
+    # 1. CoinGecko API
     try:
-        headers = {}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         if COINGECKO_API_KEY:
             headers['x-cg-demo-api-key'] = COINGECKO_API_KEY
-        
-        url = f"https://api.coingecko.com/api/v3/simple/price"
+            
+        url = "https://api.coingecko.com/api/v3/simple/price"
         params = {
-            'ids': crypto_id,
+            'ids': cg_id,
             'vs_currencies': 'usd',
             'include_24hr_change': 'true'
         }
         
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        
+        response = requests.get(url, params=params, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            if crypto_id in data:
+            if cg_id in data:
                 return {
                     'source': 'CoinGecko',
-                    'price': data[crypto_id]['usd'],
-                    'change_24h': data[crypto_id].get('usd_24h_change', 0)
+                    'price': float(data[cg_id]['usd']),
+                    'change_24h': float(data[cg_id].get('usd_24h_change', 0))
                 }
     except Exception as e:
-        logger.warning(f"CoinGecko API 失敗: {e}")
-    
-    # 2. Binance Fallback
+        logger.warning(f"CoinGecko fetch failed for {query}: {e}")
+
+    # 2. Binance API Fallback
     try:
-        symbol_map = {
-            'bitcoin': 'BTCUSDT',
-            'ethereum': 'ETHUSDT',
-            'solana': 'SOLUSDT',
-            'cardano': 'ADAUSDT',
-            'dogecoin': 'DOGEUSDT'
-        }
+        # 嘗試構建 Binance Symbol
+        # 主要邏輯：轉成大寫 + USDT
+        # 如果輸入是 'bitcoin'，我們要先試著轉回 ticker 'BTC'
         
-        if crypto_id in symbol_map:
-            symbol = symbol_map[crypto_id]
-            url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
-            response = requests.get(url, timeout=10)
+        # 反向映射: valid IDs to Tickers
+        ID_TO_TICKER = {v: k for k, v in TICKER_MAP.items()}
+        
+        ticker = query
+        if query in ID_TO_TICKER: 
+            ticker = ID_TO_TICKER[query]
             
+        # 防止過長的字串直接當 ticker (Binance 通常是 3-5 碼)
+        if len(ticker) <= 5:    
+            symbol = f"{ticker.upper()}USDT"
+            
+            url = f"https://api.binance.com/api/v3/ticker/24hr"
+            params = {'symbol': symbol}
+            
+            response = requests.get(url, params=params, timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 return {
@@ -140,8 +176,8 @@ def fetch_crypto_price_multi_source(crypto_id):
                     'change_24h': float(data['priceChangePercent'])
                 }
     except Exception as e:
-        logger.warning(f"Binance API 失敗: {e}")
-    
+        logger.warning(f"Binance fetch failed for {query}: {e}")
+        
     return None
 
 
@@ -250,24 +286,17 @@ def handle_risk_profile(chat_id, user_id):
 
 
 def handle_my_profile(chat_id, user_id):
-    """顯示用戶風險屬性"""
-    user = db.get_user(user_id)
-    if not user or not user.get('risk_level'):
-        send_message(chat_id, "❌ 您尚未完成風險評估\n\n請使用 /risk_profile 開始評估")
-        return
+    """查看用戶風險屬性"""
+    # 初始化用戶
+    db.init_user(user_id)
     
-    profile_text = f"""
-👤 <b>您的風險屬性</b>
-
-風險等級: {user['risk_level']}
-評估時間: {user.get('assessed_at', 'N/A')}
-
-<b>建議配置：</b>
-{get_allocation_suggestion(user['risk_level'])}
-
-💡 使用 /analyze [幣種] 獲取個性化交易建議
-"""
-    send_message(chat_id, profile_text)
+    # 獲取摘要
+    summary = risk_assessment.get_user_risk_summary(user_id)
+    
+    if summary:
+        send_message(chat_id, summary)
+    else:
+        send_message(chat_id, "❌ 您尚未完成風險評估\n\n請使用 /risk_profile 開始評估")
 
 
 def get_allocation_suggestion(risk_level):
@@ -283,10 +312,16 @@ def get_allocation_suggestion(risk_level):
 
 def handle_analyze(chat_id, user_id, crypto):
     """處理交易策略分析"""
-    user = db.get_user(user_id)
-    if not user or not user.get('risk_level'):
+    # 初始化用戶
+    db.init_user(user_id)
+    
+    # 獲取風險配置
+    profile = db.get_current_risk_profile(user_id)
+    if not profile:
         send_message(chat_id, "❌ 請先完成風險評估 /risk_profile")
         return
+    
+    risk_level = profile['risk_level']
     
     # 獲取價格數據
     price_data = fetch_crypto_price_multi_source(crypto.lower())
@@ -299,7 +334,7 @@ def handle_analyze(chat_id, user_id, crypto):
         crypto=crypto,
         price=price_data['price'],
         change_24h=price_data['change_24h'],
-        risk_level=user['risk_level']
+        risk_level=risk_level
     )
     
     send_message(chat_id, strategy)
@@ -319,8 +354,8 @@ def handle_positions(chat_id, user_id):
     
     for pos in positions:
         crypto = pos['symbol']
-        amount = pos['amount']
-        avg_cost = pos['avg_cost']
+        amount = pos['quantity']
+        avg_cost = pos['entry_price'] # Also avg_cost might be entry_price in DB?
         
         # 獲取當前價格
         price_data = fetch_crypto_price_multi_source(crypto.lower())
@@ -490,7 +525,7 @@ def handle_my_alerts(chat_id, user_id):
         symbol = alert['symbol']
         condition = alert['alert_condition']
         target = alert['threshold_value']
-        alert_id = alert['id']
+        alert_id = alert['watchlist_id']
         
         condition_text = "漲破" if condition == 'above' else "跌破"
         

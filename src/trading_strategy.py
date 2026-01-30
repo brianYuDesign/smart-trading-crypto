@@ -424,6 +424,51 @@ class TradingStrategy:
         
         return text
 
+    def generate_strategy(self, crypto: str, price: float, change_24h: float, risk_level: int) -> str:
+        """生成簡易交易策略建議（用於快速分析）"""
+        
+        if risk_level not in self.STRATEGY_PARAMS:
+            return "❌ 無效的風險等級"
+            
+        strategy = self.STRATEGY_PARAMS[risk_level]
+        
+        # 簡易趨勢判斷
+        trend_icon = "📈" if change_24h > 0 else "📉"
+        
+        text = f"📊 <b>{crypto.upper()} 策略分析</b>\n"
+        text += f"當前價格: ${price:,.2f} ({trend_icon} {change_24h:+.2f}%)\n"
+        text += f"您的風險屬性: {strategy['name']}\n\n"
+        
+        text += "<b>💡 交易建議：</b>\n"
+        
+        # 根據 24h 漲跌幅給出簡單建議
+        if risk_level == 1:  # 保守
+            if change_24h < -5:
+                text += "• 價格回調較深，可考慮分批建倉\n"
+            elif change_24h > 5:
+                text += "• 短期漲幅過高，建議等待回調\n"
+            else:
+                text += "• 市場波動正常，可按計劃定投\n"
+        elif risk_level == 2:  # 穩健
+             if change_24h < -8:
+                text += "• 超賣跡象，關注反彈機會\n"
+             elif change_24h > 8:
+                text += "• 強勢上漲，注意止盈\n"
+             else:
+                text += "• 趨勢不明顯，建議區間操作\n"
+        elif risk_level == 3:  # 積極
+             if change_24h > 10:
+                text += "• 動能強勁，可追價但需設窄止損\n"
+             elif change_24h < -10:
+                text += "• 急跌機會，可嘗試搶反彈\n"
+             else:
+                text += "• 波動不足，建議觀望或尋找突破\n"
+                
+        text += f"\n<b>🛑 止損建議：</b> {strategy['exit']['stop_loss']}%\n"
+        text += f"<b>✅ 止盈建議：</b> {strategy['exit']['take_profit']}%\n"
+        
+        return text
+
 
 # 全局交易策略實例
 trading_strategy = TradingStrategy()
