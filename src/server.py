@@ -191,12 +191,14 @@ def handle_help(chat_id):
 <b>🔔 價格提醒</b>
 /alert [幣種] [目標價] - 設定價格提醒
 /myalerts - 查看我的提醒列表
+/del_alert [ID] - 刪除指定提醒
 
 <b>範例：</b>
 • /analyze BTC
 • /price ETH
 • /add_position BTC 0.5 45000
 • /alert ETH 3000
+• /del_alert 1 (刪除ID為1的提醒)
 """
     send_message(chat_id, help_text)
 
@@ -436,6 +438,88 @@ def handle_top(chat_id):
         send_message(chat_id, "❌ 查詢失敗，請稍後再試")
 
 
+def handle_alert(chat_id, user_id, parts):
+    """處理 /alert 指令"""
+    if len(parts) < 3:
+        send_message(chat_id, "❌ 格式錯誤\n\n正確格式: /alert [幣種] [目標價]\n範例: /alert BTC 50000")
+        return
+    
+    symbol = parts[1].upper()
+    try:
+        target_price = float(parts[2])
+    except ValueError:
+        send_message(chat_id, "❌ 目標價必須是數字")
+        return
+    
+    # 獲取當前價格以判斷是漲破還是跌破
+    price_data = fetch_crypto_price_multi_source(symbol.lower())
+    if not price_data:
+        send_message(chat_id, f"❌ 無法獲取 {symbol} 的當前價格，無法設定提醒")
+        return
+    
+    current_price = price_data['price']
+    
+    if target_price > current_price:
+        condition = 'above'
+        condition_text = '漲破'
+    else:
+        condition = 'below'
+        condition_text = '跌破'
+    
+    # 儲存到數據庫
+    # alert_type='price', alert_condition=condition, threshold_value=target_price
+    watchlist_id = db.add_watchlist(user_id, symbol, 'price', condition, target_price)
+    
+    if watchlist_id:
+        send_message(chat_id, f"✅ 已設定提醒 (ID: {watchlist_id})\n\n當 {symbol} {condition_text} ${target_price:,.2f} 時通知您")
+    else:
+        send_message(chat_id, "❌ 設定失敗，請稍後再試")
+
+
+def handle_my_alerts(chat_id, user_id):
+    """處理 /myalerts 指令"""
+    alerts = db.get_active_watchlist(user_id)
+    
+    if not alerts:
+        send_message(chat_id, "🔕 您目前沒有設定任何提醒")
+        return
+    
+    message = "🔔 <b>您的價格提醒</b>\n\n"
+    
+    for alert in alerts:
+        symbol = alert['symbol']
+        condition = alert['alert_condition']
+        target = alert['threshold_value']
+        alert_id = alert['id']
+        
+        condition_text = "漲破" if condition == 'above' else "跌破"
+        
+        message += f"ID: {alert_id} | <b>{symbol}</b> {condition_text} ${target:,.2f}\n"
+    
+    message += "\n🗑 使用 /del_alert [ID] 刪除提醒"
+    send_message(chat_id, message)
+
+
+def handle_del_alert(chat_id, user_id, parts):
+    """處理 /del_alert 指令"""
+    if len(parts) < 2:
+        send_message(chat_id, "❌ 請指定要刪除的提醒 ID\n範例: /del_alert 5")
+        return
+    
+    try:
+        alert_id = int(parts[1])
+    except ValueError:
+        send_message(chat_id, "❌ ID 必須是數字")
+        return
+    
+    success = db.delete_watchlist_item(user_id, alert_id)
+    
+    if success:
+        send_message(chat_id, f"✅ 已刪除提醒 (ID: {alert_id})")
+    else:
+        send_message(chat_id, f"❌ 刪除失敗，找不到 ID 為 {alert_id} 的提醒或不屬於您")
+
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """處理 Telegram Webhook"""
@@ -479,6 +563,12 @@ def webhook():
                     handle_top(chat_id)
                 elif command == '/news':
                     handle_news(chat_id)
+                elif command == '/alert':
+                    handle_alert(chat_id, user_id, parts)
+                elif command == '/myalerts':
+                    handle_my_alerts(chat_id, user_id)
+                elif command == '/del_alert':
+                    handle_del_alert(chat_id, user_id, parts)
                 else:
                     send_message(chat_id, "❌ 未知指令\n\n輸入 /help 查看可用指令")
             

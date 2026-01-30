@@ -515,6 +515,25 @@ class DatabaseManager:
             logger.error(f"獲取監控列表失敗: {e}")
             return []
 
+    def delete_watchlist_item(self, user_id: int, watchlist_id: int) -> bool:
+        """刪除/停用監控項目"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE market_watchlist 
+                SET is_active = 0 
+                WHERE id = ? AND user_id = ?
+            ''', (watchlist_id, user_id))
+            
+            conn.commit()
+            success = cursor.rowcount > 0
+            conn.close()
+            return success
+        except Exception as e:
+            logger.error(f"刪除監控失敗: {e}")
+            return False
+
     # ==================== 訂閱管理 (從 V1 移植) ====================
 
     def add_subscription(self, user_id, symbol, condition=None):

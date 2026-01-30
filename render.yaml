@@ -6,14 +6,14 @@ services:
     plan: free
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: python unified_server.py
+    startCommand: python main.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
       - key: TELEGRAM_CHAT_ID
       - key: BINANCE_API_KEY
       - key: BINANCE_API_SECRET
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: 3.13.0
       - key: MONITOR_INTERVAL_MINUTES
         value: 5
       - key: ENABLE_MONITORING
