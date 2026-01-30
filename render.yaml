@@ -6,12 +6,18 @@ services:
     plan: free
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    startCommand: python unified_server.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
-        sync: false
       - key: TELEGRAM_CHAT_ID
-        sync: false
+      - key: BINANCE_API_KEY
+      - key: BINANCE_API_SECRET
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: MONITOR_INTERVAL_MINUTES
+        value: 5
+      - key: ENABLE_MONITORING
+        value: true
+      - key: DEFAULT_SYMBOL
+        value: BTCUSDT
     healthCheckPath: /health
