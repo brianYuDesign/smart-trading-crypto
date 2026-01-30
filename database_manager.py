@@ -146,6 +146,69 @@ class DatabaseManager:
             logger.error(f"更新時區失敗: {e}")
             return False
     
+    def init_user(self, user_id: int) -> bool:
+        """初始化用戶（如果不存在則創建）"""
+        try:
+            user = self.get_user(user_id)
+            if not user:
+                self.create_or_update_user(user_id)
+                logger.info(f"初始化新用戶: {user_id}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"初始化用戶失敗: {e}")
+            raise
+    
+    def get_positions(self, user_id: int, status: str = 'open') -> List[Dict]:
+        """獲取用戶的持倉
+        
+        Args:
+            user_id: 用戶 ID
+            status: 持倉狀態 ('open' 或 'closed')
+        
+        Returns:
+            持倉列表
+        """
+        try:
+            if status == 'open':
+                return self.get_open_positions(user_id)
+            else:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    SELECT id, symbol, position_type, entry_price, exit_price,
+                           position_size, stop_loss, take_profit, status,
+                           entry_time, exit_time, profit_loss
+                    FROM positions
+                    WHERE user_id = ? AND status = ?
+                    ORDER BY exit_time DESC
+                """, (user_id, status))
+                
+                positions = []
+                for row in cursor.fetchall():
+                    positions.append({
+                        'id': row[0],
+                        'symbol': row[1],
+                        'position_type': row[2],
+                        'entry_price': row[3],
+                        'exit_price': row[4],
+                        'position_size': row[5],
+                        'stop_loss': row[6],
+                        'take_profit': row[7],
+                        'status': row[8],
+                        'entry_time': row[9],
+                        'exit_time': row[10],
+                        'profit_loss': row[11]
+                    })
+                
+                conn.close()
+                return positions
+                
+        except Exception as e:
+            logger.error(f"獲取持倉失敗: {e}")
+            return []
+    
     # ==================== 風險屬性管理 ====================
     
     def save_risk_profile(self, user_id: int, risk_score: int, 
