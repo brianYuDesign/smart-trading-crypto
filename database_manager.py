@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 import json
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +28,41 @@ class DatabaseManager:
     def init_database(self):
         """初始化資料庫結構"""
         try:
-            with open('database_schema.sql', 'r', encoding='utf-8') as f:
-                schema = f.read()
+            if os.path.exists('database_schema.sql'):
+                with open('database_schema.sql', 'r', encoding='utf-8') as f:
+                    schema = f.read()
+                
+                conn = self.get_connection()
+                conn.executescript(schema)
+                conn.commit()
+                conn.close()
             
-            conn = self.get_connection()
-            conn.executescript(schema)
-            conn.commit()
-            conn.close()
+            # 執行遷移：檢查並添加缺失的欄位
+            self._migrate_database()
+            
             logger.info("資料庫初始化成功")
         except Exception as e:
             logger.error(f"資料庫初始化失敗: {e}")
             raise
+
+    def _migrate_database(self):
+        """執行資料庫遷移"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # 1. 檢查 users 表是否需要 timezone 欄位
+            cursor.execute("PRAGMA table_info(users)")
+            columns = [info[1] for info in cursor.fetchall()]
+            
+            if 'timezone' not in columns:
+                logger.info("遷移: 為 users 表添加 timezone 欄位")
+                cursor.execute("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'Asia/Taipei'")
+            
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"資料庫遷移失敗: {e}")
     
     # ==================== 用戶管理 ====================
     

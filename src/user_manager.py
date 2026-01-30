@@ -8,6 +8,7 @@ class UserManager:
         self.db_path = db_path
         self._ensure_db_dir()
         self._init_db()
+        self._migrate_db()
         
     def _ensure_db_dir(self):
         """確保數據庫目錄存在"""
@@ -26,7 +27,8 @@ class UserManager:
                     username TEXT,
                     first_name TEXT,
                     last_name TEXT,
-                    joined_at TIMESTAMP
+                    joined_at TIMESTAMP,
+                    timezone TEXT DEFAULT 'Asia/Taipei'
                 )
             ''')
             # 訂閱表
@@ -41,6 +43,23 @@ class UserManager:
                 )
             ''')
             conn.commit()
+
+    def _migrate_db(self):
+        """遷移數據庫"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                c = conn.cursor()
+                # 檢查 timezone 欄位是否存在
+                c.execute("PRAGMA table_info(users)")
+                columns = [info[1] for info in c.fetchall()]
+                
+                if 'timezone' not in columns:
+                    print("Migrating database: Adding timezone column to users table...")
+                    c.execute("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'Asia/Taipei'")
+                    conn.commit()
+                    print("Migration completed.")
+        except Exception as e:
+            print(f"Database migration failed: {e}")
     
     def update_user(self, user_data):
         """更新或創建用戶"""

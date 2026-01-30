@@ -16,6 +16,10 @@ Telegram Bot Webhook Server - V2 智能投資顧問版
 from flask import Flask, request, jsonify
 import requests
 import os
+from dotenv import load_dotenv
+
+# 加載環境變數
+load_dotenv()
 import logging
 from datetime import datetime
 import pytz
