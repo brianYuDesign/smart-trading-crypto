@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 # 創建 Flask 應用
 app = Flask(__name__)
 
-# =============================================================================
-# 1. Webhook Server 部分 (虛擬用戶指令)
-# =============================================================================
+# ==============================================================================
+# 1. Webhook Server 部分 (虛擬執行或指令)
+# ==============================================================================
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -48,7 +48,7 @@ def health_check():
 def webhook():
     """Telegram Webhook 端點"""
     try:
-        # 修復: 使用正確的模組名稱 (複數形式)
+        # 修復：使用正確的模組名稱 (複數形式)
         from src.telegram_handlers import TelegramHandler
         
         data = request.get_json()
@@ -77,9 +77,9 @@ def index():
         'status': 'running'
     }), 200
 
-# =============================================================================
+# ==============================================================================
 # 2. 定期監控部分 (背景任務)
-# =============================================================================
+# ==============================================================================
 
 class ScheduledMonitor:
     """定期監控任務管理器"""
@@ -105,99 +105,111 @@ class ScheduledMonitor:
         self.running = False
         if self.thread:
             self.thread.join(timeout=5)
-        logger.info("Monitor stopped")
+        logger.info("⏹️ Scheduled monitor stopped")
         
     def _monitor_loop(self):
-        """監控循環 (在背景線程中執行)"""
+        """監控循環主邏輯"""
         while self.running:
             try:
-                self._run_monitoring_tasks()
+                self._run_monitoring_task()
+                time.sleep(self.interval_minutes * 60)
             except Exception as e:
-                logger.error(f"Monitor error: {e}", exc_info=True)
-            
-            # 等待下次執行
-            time.sleep(self.interval_minutes * 60)
-    
-    def _run_monitoring_tasks(self):
-        """執行監控任務"""
-        logger.info("🔍 Running scheduled monitoring...")
-        
+                logger.error(f"Monitor loop error: {e}")
+                time.sleep(60)  # 錯誤後等待1分鐘再試
+                
+    def _run_monitoring_task(self):
+        """執行一次監控任務"""
         try:
-            # 導入監控模組
+            logger.info("🔍 Running scheduled monitoring...")
+            
+            # 嘗試在這裡局部匯入 market_analyzer 以更彈性原始代碼
             from src.market_analyzer import MarketAnalyzer
             from src.news_monitor import NewsMonitor
-            from src.notifier import TelegramNotifier
+            from src.notifier import Notifier
             
-            # 獲取配置
-            symbol = os.getenv('DEFAULT_SYMBOL', 'BTCUSDT')
+            # ✅ 修復：提供必需的 config 參數
+            config = {
+                'trading': {
+                    'symbol': os.getenv('TRADING_SYMBOL', 'BTCUSDT'),
+                    'timeframe': os.getenv('TRADING_TIMEFRAME', '15m'),
+                    'lookback_periods': int(os.getenv('LOOKBACK_PERIODS', '100'))
+                }
+            }
             
-            # 1. 市場分析
-            logger.info(f"📊 Analyzing market for {symbol}...")
-            analyzer = MarketAnalyzer()
-            market_data = analyzer.analyze_market(symbol)
-            
-            # 2. 新聞監控
-            logger.info("📰 Monitoring news...")
+            # 初始化分析器
+            market_analyzer = MarketAnalyzer(config=config)
             news_monitor = NewsMonitor()
-            news_data = news_monitor.check_news()
+            notifier = Notifier()
             
-            # 3. 發送警報 (如果需要)
-            notifier = TelegramNotifier()
+            # 執行市場分析
+            logger.info("📊 Analyzing market data...")
+            analysis_result = market_analyzer.analyze_market()
             
-            # 檢查市場異常
-            if market_data and market_data.get('alert'):
-                logger.warning(f"⚠️ Market alert detected: {market_data.get('alert_message')}")
-                notifier.send_alert(
-                    f"🚨 Market Alert\n\n{market_data.get('alert_message')}"
-                )
+            if analysis_result and analysis_result.get('alerts'):
+                for alert in analysis_result['alerts']:
+                    notifier.send_alert(alert)
+                    logger.info(f"📢 Alert sent: {alert.get('message', 'N/A')}")
             
-            # 檢查新聞風險
-            if news_data and news_data.get('risk_level') == 'high':
-                logger.warning(f"⚠️ News risk detected: {news_data.get('summary')}")
-                notifier.send_alert(
-                    f"📰 News Risk Alert\n\n{news_data.get('summary')}"
-                )
+            # 執行新聞監控
+            logger.info("📰 Checking crypto news...")
+            news_result = news_monitor.check_news()
             
-            logger.info("✅ Monitoring cycle completed")
+            if news_result and news_result.get('important_news'):
+                for news in news_result['important_news']:
+                    notifier.send_news_alert(news)
+                    logger.info(f"📰 News alert sent: {news.get('title', 'N/A')}")
             
-        except ImportError as e:
-            logger.error(f"Failed to import monitoring modules: {e}")
-            logger.info("💡 Monitoring modules not available - skipping this cycle")
+            logger.info("✅ Monitoring task completed successfully")
+            
         except Exception as e:
             logger.error(f"Monitoring task error: {e}", exc_info=True)
 
-# =============================================================================
+# ==============================================================================
 # 3. 主程序入口
-# =============================================================================
+# ==============================================================================
 
 def main():
     """主程序入口"""
-    logger.info("=" * 60)
+    logger.info("=" * 80)
     logger.info("🚀 Starting Smart Trading Crypto Bot - Unified Service")
-    logger.info("=" * 60)
+    logger.info("=" * 80)
     
-    # 檢查是否啟用監控
-    enable_monitoring = os.getenv('ENABLE_MONITORING', 'true').lower() == 'true'
-    monitor_interval = int(os.getenv('MONITOR_INTERVAL_MINUTES', '5'))
+    # 檢查環境變數
+    required_env_vars = [
+        'TELEGRAM_BOT_TOKEN',
+        'TELEGRAM_CHAT_ID',
+        'BINANCE_API_KEY',
+        'BINANCE_API_SECRET'
+    ]
+    
+    missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+    if missing_vars:
+        logger.warning(f"⚠️  Missing environment variables: {', '.join(missing_vars)}")
+        logger.warning("Some features may not work properly")
     
     # 啟動定期監控 (背景線程)
-    if enable_monitoring:
-        monitor = ScheduledMonitor(interval_minutes=monitor_interval)
-        monitor.start()
-        logger.info(f"✅ Monitoring enabled (interval: {monitor_interval} minutes)")
-    else:
-        logger.info("⚠️ Monitoring disabled")
+    monitor_interval = int(os.getenv('MONITOR_INTERVAL_MINUTES', '5'))
+    monitor = ScheduledMonitor(interval_minutes=monitor_interval)
+    monitor.start()
     
     # 啟動 Flask Webhook Server (主線程)
     port = int(os.getenv('PORT', 5000))
     logger.info(f"🌐 Starting Flask Webhook Server on port {port}...")
     
     try:
-        # 注意: 在生產環境中，Render 會使用 gunicorn
-        # 這裡的 app.run() 主要用於開發和測試
-        app.run(host='0.0.0.0', port=port, debug=False)
+        app.run(
+            host='0.0.0.0',
+            port=port,
+            debug=False,
+            use_reloader=False  # 避免重複啟動監控線程
+        )
+    except KeyboardInterrupt:
+        logger.info("\n⏹️  Received shutdown signal")
+        monitor.stop()
+        logger.info("👋 Service stopped")
     except Exception as e:
-        logger.error(f"Server error: {e}", exc_info=True)
+        logger.error(f"❌ Server error: {e}", exc_info=True)
+        monitor.stop()
         sys.exit(1)
 
 if __name__ == '__main__':
