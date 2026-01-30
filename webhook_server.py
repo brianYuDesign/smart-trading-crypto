@@ -201,7 +201,8 @@ def handle_help(chat_id):
 
 def handle_risk_profile(chat_id, user_id):
     """處理風險評估問卷"""
-    risk_assessment.start_assessment(chat_id, user_id, send_message)
+    question_text = risk_assessment.start_assessment(user_id)
+    send_message(chat_id, question_text)
 
 
 def handle_my_profile(chat_id, user_id):
