@@ -6,7 +6,7 @@ Telegram Bot 指令處理器
 import logging
 from datetime import datetime
 from typing import Optional
-from crypto_data_service import (
+from .crypto_data_service import (
     CryptoDataService, 
     format_number, 
     format_percentage,
