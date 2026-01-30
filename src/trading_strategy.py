@@ -5,7 +5,7 @@
 import logging
 from typing import Dict, Optional, List, Tuple
 from datetime import datetime
-from database_manager import db
+from .database import db
 
 logger = logging.getLogger(__name__)
 

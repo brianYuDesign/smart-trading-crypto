@@ -9,8 +9,8 @@ import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import pytz
-from database_manager import db
-from trading_strategy import trading_strategy
+from .database import db
+from .trading_strategy import trading_strategy
 
 logger = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@
 """
 import logging
 from typing import Dict, List, Tuple, Optional
-from database_manager import db
+from .database import db
 
 logger = logging.getLogger(__name__)
 

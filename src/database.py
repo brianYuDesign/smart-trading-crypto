@@ -89,6 +89,21 @@ class DatabaseManager:
                     cursor.execute("ALTER TABLE user_risk_profiles ADD COLUMN is_current INTEGER DEFAULT 1")
 
             
+            # 3. 檢查是否需要創建 subscriptions 表
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='subscriptions'")
+            if not cursor.fetchone():
+                logger.info("遷移: 創建 subscriptions 表")
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS subscriptions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER,
+                        symbol TEXT,
+                        condition TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, symbol)
+                    )
+                ''')
+
             conn.commit()
             conn.close()
         except Exception as e:
@@ -497,6 +512,76 @@ class DatabaseManager:
             return [dict(row) for row in rows]
         except Exception as e:
             logger.error(f"獲取監控列表失敗: {e}")
+            logger.error(f"獲取監控列表失敗: {e}")
+            return []
+
+    # ==================== 訂閱管理 (從 V1 移植) ====================
+
+    def add_subscription(self, user_id, symbol, condition=None):
+        """添加訂閱"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO subscriptions (user_id, symbol, condition, created_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (user_id, symbol.upper(), condition))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"添加訂閱失敗: {e}")
+            return False
+
+    def remove_subscription(self, user_id, symbol):
+        """移除訂閱"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                DELETE FROM subscriptions 
+                WHERE user_id = ? AND symbol = ?
+            ''', (user_id, symbol.upper()))
+            conn.commit()
+            deleted = cursor.rowcount > 0
+            conn.close()
+            return deleted
+        except Exception as e:
+            logger.error(f"移除訂閱失敗: {e}")
+            return False
+
+    def get_user_subscriptions(self, user_id):
+        """獲取用戶訂閱列表"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT symbol, condition, created_at 
+                FROM subscriptions 
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+            ''', (user_id,))
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"獲取用戶訂閱失敗: {e}")
+            return []
+
+    def get_all_subscriptions(self):
+        """獲取所有訂閱（用於監控）"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT user_id, symbol, condition 
+                FROM subscriptions
+            ''')
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"獲取所有訂閱失敗: {e}")
             return []
     
     # ==================== 市場數據管理 ====================

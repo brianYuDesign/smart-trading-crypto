@@ -16,27 +16,16 @@ Telegram Bot Webhook Server - V2 智能投資顧問版
 from flask import Flask, request, jsonify
 import requests
 import os
-from dotenv import load_dotenv
-
-# 加載環境變數
-load_dotenv()
 import logging
 from datetime import datetime
-import pytz
 import feedparser
 from concurrent.futures import ThreadPoolExecutor
-
-# 導入新模組
-from database_manager import db
-from risk_assessment import risk_assessment
-from trading_strategy import trading_strategy
-from market_monitor import init_monitor
+from .database import db
+from .risk_assessment import risk_assessment
+from .trading_strategy import trading_strategy
+from .market_monitor import init_monitor
 
 # 配置日誌
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -45,8 +34,15 @@ app = Flask(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY', '')
 
-# 初始化市場監控
-monitor = init_monitor(TELEGRAM_BOT_TOKEN)
+# 初始化市場監控 (Global variable to hold the monitor instance)
+monitor = None
+
+def init_app_monitor():
+    global monitor
+    if TELEGRAM_BOT_TOKEN:
+        monitor = init_monitor(TELEGRAM_BOT_TOKEN)
+    else:
+        logger.warning("TELEGRAM_BOT_TOKEN 未設置，監控功能未啟動")
 
 # 用戶時區存儲（現在使用資料庫）
 user_timezones = {}
@@ -66,6 +62,10 @@ NEWS_FEEDS = {
 
 def send_message(chat_id, text, parse_mode='HTML'):
     """發送 Telegram 訊息"""
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN 未設置")
+        return None
+        
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     data = {
         'chat_id': chat_id,
@@ -182,7 +182,7 @@ def handle_help(chat_id):
 /positions - 查看我的持倉
 /add_position [幣種] [數量] [成本] - 新增持倉
 
-<b>� 即時新聞</b>
+<b>📰 即時新聞</b>
 /news - 查看最新加密貨幣新聞
 /price [幣種] - 查詢即時價格
 /top - 市值前10名加密貨幣
@@ -241,7 +241,6 @@ def handle_news(chat_id, lang='zh'):
 
 
 def handle_risk_profile(chat_id, user_id):
-    """處理風險評估問卷"""
     """處理風險評估問卷"""
     question = risk_assessment.start_assessment(user_id)
     send_message(chat_id, question)
@@ -483,14 +482,12 @@ def webhook():
                     send_message(chat_id, "❌ 未知指令\n\n輸入 /help 查看可用指令")
             
             # 處理問卷回答
-            # 處理問卷回答
             elif risk_assessment.is_in_assessment(user_id):
                 result = risk_assessment.process_answer(user_id, text)
                 
                 if result['status'] == 'completed':
                     send_message(chat_id, result['message'])
                     # 也可以顯示結果摘要
-                    # send_message(chat_id, risk_assessment.format_result(result['result']))
                 elif result['status'] == 'continue':
                     send_message(chat_id, result['message'])
                 elif result['status'] == 'error':
@@ -510,8 +507,3 @@ def health():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat()
     })
-
-
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
