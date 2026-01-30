@@ -13,6 +13,11 @@ from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+# 確保專案根目錄在 Python 路徑中
+project_root = os.path.dirname(os.path.abspath(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 # 加載環境變數
 load_dotenv()
 
@@ -36,7 +41,7 @@ def update_market_data():
         from src.crypto_data_service import CryptoDataService
         
         service = CryptoDataService()
-        # 更新主要加密貨幣數據
+        # 更新主要加密貨幣平價數據
         symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP']
         for symbol in symbols:
             try:
@@ -65,10 +70,7 @@ def send_daily_report():
     """發送每日市場報告"""
     try:
         logger.info("📊 生成每日報告...")
-        from src.telegram_handlers import TelegramHandlers
-        
-        handlers = TelegramHandlers()
-        # 這裡可以呼叫 handlers 的方法來產生並發送報告
+        # 這裡可以呼叫 handlers 的方法來發生成並發送報告
         # 實際實作需要根據你的需求客製化
         logger.info("✅ 每日報告已發送")
     except Exception as e:
@@ -89,78 +91,79 @@ def init_scheduler():
         name='更新市場數據',
         replace_existing=True
     )
-    logger.info("✓ 已排程: 每小時更新市場數據")
+    logger.info("✓ 已排程整點更新市場數據事件")
     
-    # 每30分鐘更新新聞
+    # 每30分鐘更新新聞 (緩存整點避免瞬時高峰)
     scheduler.add_job(
         update_news_feed,
         trigger=CronTrigger(minute='0,30'),  # 每小時的0分和30分
         id='update_news_feed',
-        name='更新新聞',
+        name='更新新聞來源',
         replace_existing=True
     )
-    logger.info("✓ 已排程: 每30分鐘更新新聞")
+    logger.info("✓ 已排程每30分鐘更新新聞事件")
     
-    # 每天早上8點發送報告
-    scheduler.add_job(
-        send_daily_report,
-        trigger=CronTrigger(hour=8, minute=0),
-        id='send_daily_report',
-        name='發送每日報告',
-        replace_existing=True
-    )
-    logger.info("✓ 已排程: 每天8:00發送報告")
+    # 每天早上10:00發送新聞檢查報告 (操作時間避誤)
+    # scheduler.add_job(
+    #     send_daily_report,
+    #     trigger=CronTrigger(hour=10, minute=0),
+    #     id='send_daily_report',
+    #     name='發送全日報告',
+    #     replace_existing=True
+    # )
+    # logger.info("✓ 已排程每日早10點發送全日報告事件")
     
-    # 啟動 scheduler
+    # 啟動調度器
     scheduler.start()
-    logger.info("✅ APScheduler 已啟動")
-    
-    # 立即執行一次更新 (可選)
-    logger.info("🔄 執行初始數據更新...")
-    update_market_data()
+    logger.info("✅ APScheduler 已啟動且執行中")
 
-def run_webhook_mode():
-    """
-    執行 Webhook Server 模式 (整合 APScheduler)
-    """
+def main():
+    """主入口函數
+Integration: Flask Webhook + APScheduler
+"""
     try:
-        logger.info("=" * 60)
-        logger.info("🤖 Crypto Trading Bot - Unified Mode")
-        logger.info("   ├─ Telegram Webhook (即時訊息)")
-        logger.info("   └─ APScheduler (定時任務)")
-        logger.info("=" * 60)
+        logger.info("="*80)
+        logger.info("🚀 Crypto Trading Bot 啟動完整！")
+        logger.info("Simplified Architecture: Render + APScheduler")
+        logger.info("="*80)
         
         # 初始化定時任務
         init_scheduler()
+        logger.info("✅ 定時任務設定完成")
         
-        # 導入並運行 Flask 應用
+        # 導入 Flask Webhook
+        logger.info("⏰ 導入 Flask Webhook Server...")
         from src.server import app, init_app_monitor
         
-        # 初始化監控組件
-        init_app_monitor()
+        # 初始化監控 (如果有的話)
+        try:
+            init_app_monitor()
+            logger.info("✅ 監控系統已初始化")
+        except Exception as e:
+            logger.warning(f"⚠️  監控初始化警告: {e}")
         
-        port = int(os.getenv('PORT', 5000))
-        logger.info(f"🚀 Server starting on port {port}...")
+        # 設定 Flask
+        port = int(os.getenv('PORT', 10000))
+        host = os.getenv('HOST', '0.0.0.0')
         
-        # 注意: 在生產環境中使用 Gunicorn
-        # 此處的 app.run() 會阻塞，scheduler 在背景運行
-        app.run(host='0.0.0.0', port=port)
+        logger.info("="*80)
+        logger.info(f"🌐 Flask Server 正在啟動...")
+        logger.info(f"   Host: {host}")
+        logger.info(f"   Port: {port}")
+        logger.info(f"   Webhook: /webhook")
+        logger.info("="*80)
+        
+        # 啟動 Flask (Gunicorn 會透過 WSGI 呼叫 app)
+        app.run(host=host, port=port, debug=False)
         
     except KeyboardInterrupt:
-        logger.info("⏹️  收到中斷信號，正在關閉...")
+        logger.info("\n⚠️  收到中斷信號，正在關閉...")
         if scheduler:
             scheduler.shutdown()
-        sys.exit(0)
+            logger.info("✅ Scheduler 已停止")
     except Exception as e:
-        logger.error(f"❌ 服務錯誤: {e}", exc_info=True)
-        if scheduler:
-            scheduler.shutdown()
+        logger.error(f"❌ 啟動錯誤: {e}", exc_info=True)
         sys.exit(1)
-
-def main():
-    """主程式入口"""
-    # 現在只有一種模式: webhook + scheduler
-    run_webhook_mode()
 
 if __name__ == '__main__':
     main()
