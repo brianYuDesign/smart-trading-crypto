@@ -307,6 +307,10 @@ class RiskAssessment:
             return True
         return False
 
+    def is_in_assessment(self, user_id: int) -> bool:
+        """檢查用戶是否正在進行評估"""
+        return user_id in self.user_sessions
+
 
 # 全局風險評估實例
 risk_assessment = RiskAssessment()

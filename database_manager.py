@@ -63,7 +63,13 @@ class DatabaseManager:
             
             if 'is_active' not in columns:
                 logger.info("遷移: 為 users 表添加 is_active 欄位")
+            if 'is_active' not in columns:
+                logger.info("遷移: 為 users 表添加 is_active 欄位")
                 cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+
+            if 'language_code' not in columns:
+                logger.info("遷移: 為 users 表添加 language_code 欄位")
+                cursor.execute("ALTER TABLE users ADD COLUMN language_code TEXT DEFAULT 'zh-TW'")
 
             # 2. 檢查 user_risk_profiles 表是否需要 notification_frequency 欄位
             # 先檢查表是否存在

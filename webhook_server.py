@@ -201,7 +201,9 @@ def handle_help(chat_id):
 
 def handle_risk_profile(chat_id, user_id):
     """處理風險評估問卷"""
-    risk_assessment.start_assessment(chat_id, user_id, send_message)
+    """處理風險評估問卷"""
+    question = risk_assessment.start_assessment(user_id)
+    send_message(chat_id, question)
 
 
 def handle_my_profile(chat_id, user_id):
@@ -438,8 +440,18 @@ def webhook():
                     send_message(chat_id, "❌ 未知指令\n\n輸入 /help 查看可用指令")
             
             # 處理問卷回答
+            # 處理問卷回答
             elif risk_assessment.is_in_assessment(user_id):
-                risk_assessment.process_answer(chat_id, user_id, text, send_message)
+                result = risk_assessment.process_answer(user_id, text)
+                
+                if result['status'] == 'completed':
+                    send_message(chat_id, result['message'])
+                    # 也可以顯示結果摘要
+                    # send_message(chat_id, risk_assessment.format_result(result['result']))
+                elif result['status'] == 'continue':
+                    send_message(chat_id, result['message'])
+                elif result['status'] == 'error':
+                    send_message(chat_id, f"❌ {result['message']}")
         
         return jsonify({'status': 'ok'})
     
