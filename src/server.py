@@ -41,6 +41,7 @@ def init_app_monitor():
     global monitor
     if TELEGRAM_BOT_TOKEN:
         monitor = init_monitor(TELEGRAM_BOT_TOKEN)
+        monitor.start()
     else:
         logger.warning("TELEGRAM_BOT_TOKEN 未設置，監控功能未啟動")
 
@@ -315,7 +316,7 @@ def handle_positions(chat_id, user_id):
     total_cost = 0
     
     for pos in positions:
-        crypto = pos['crypto']
+        crypto = pos['symbol']
         amount = pos['amount']
         avg_cost = pos['avg_cost']
         

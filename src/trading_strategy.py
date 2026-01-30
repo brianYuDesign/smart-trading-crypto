@@ -136,7 +136,8 @@ class TradingStrategy:
             max_score += 20
         
         # 2. 成交量分析
-        if 'volume_24h' in market_data and 'avg_volume' in market_data:
+        if ('volume_24h' in market_data and 'avg_volume' in market_data and 
+            market_data['volume_24h'] is not None and market_data['avg_volume'] and market_data['avg_volume'] > 0):
             volume_ratio = market_data['volume_24h'] / market_data['avg_volume']
             required_ratio = entry_params.get('volume_multiplier', 1.0)
             
@@ -149,7 +150,8 @@ class TradingStrategy:
         
         # 3. 均線分析
         if entry_params.get('ma_condition') == 'ma50_above_ma200':
-            if 'ma_50' in market_data and 'ma_200' in market_data:
+            if ('ma_50' in market_data and 'ma_200' in market_data and 
+                market_data['ma_50'] is not None and market_data['ma_200'] is not None):
                 if market_data['ma_50'] > market_data['ma_200']:
                     signals.append("✅ MA50 > MA200 (上漲趨勢)")
                     confidence_score += 15
@@ -159,7 +161,8 @@ class TradingStrategy:
         
         # 4. MACD 分析
         if entry_params.get('macd_condition') == 'golden_cross':
-            if 'macd' in market_data and 'macd_signal' in market_data:
+            if ('macd' in market_data and 'macd_signal' in market_data and
+                market_data['macd'] is not None and market_data['macd_signal'] is not None):
                 if market_data['macd'] > market_data['macd_signal']:
                     signals.append("✅ MACD 金叉 (買入信號)")
                     confidence_score += 15
@@ -181,7 +184,7 @@ class TradingStrategy:
             max_score += 15
         
         # 6. 價格突破分析（積極型）
-        if entry_params.get('price_breakout') and 'price_change_24h' in market_data:
+        if entry_params.get('price_breakout') and 'price_change_24h' in market_data and market_data['price_change_24h'] is not None:
             if market_data['price_change_24h'] > 5:
                 signals.append(f"✅ 價格突破 +{market_data['price_change_24h']:.1f}%")
                 confidence_score += 15
@@ -212,7 +215,7 @@ class TradingStrategy:
             risk_level=risk_level,
             price=market_data.get('price', 0),
             rsi=market_data.get('rsi'),
-            volume_ratio=market_data.get('volume_24h', 0) / market_data.get('avg_volume', 1),
+            volume_ratio=market_data.get('volume_24h', 0) / (market_data.get('avg_volume') or 1),
             news_sentiment=market_data.get('news_sentiment'),
             recommendation=recommendation,
             confidence=confidence
@@ -314,7 +317,8 @@ class TradingStrategy:
             
             # MACD 死叉
             if exit_params.get('macd_condition') == 'death_cross':
-                if 'macd' in market_data and 'macd_signal' in market_data:
+                if ('macd' in market_data and 'macd_signal' in market_data and
+                    market_data['macd'] is not None and market_data['macd_signal'] is not None):
                     if market_data['macd'] < market_data['macd_signal']:
                         signals.append("⚠️ MACD 死叉 (賣出信號)")
                         signal_count += 1
@@ -322,7 +326,8 @@ class TradingStrategy:
             
             # 成交量萎縮
             if 'volume_decline' in exit_params:
-                if 'volume_24h' in market_data and 'avg_volume' in market_data:
+                if ('volume_24h' in market_data and 'avg_volume' in market_data and
+                    market_data['volume_24h'] is not None and market_data['avg_volume'] and market_data['avg_volume'] > 0):
                     volume_ratio = market_data['volume_24h'] / market_data['avg_volume']
                     if volume_ratio < exit_params['volume_decline']:
                         signals.append(f"⚠️ 成交量萎縮 {volume_ratio:.1f}x")
@@ -374,7 +379,7 @@ class TradingStrategy:
             risk_level=risk_level,
             price=current_price,
             rsi=market_data.get('rsi'),
-            volume_ratio=market_data.get('volume_24h', 0) / market_data.get('avg_volume', 1),
+            volume_ratio=market_data.get('volume_24h', 0) / (market_data.get('avg_volume') or 1),
             news_sentiment=market_data.get('news_sentiment'),
             recommendation=recommendation,
             confidence=confidence

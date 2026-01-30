@@ -460,8 +460,7 @@ class MarketMonitor:
             url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
             data = {
                 'chat_id': user_id,
-                'text': message,
-                'parse_mode': 'HTML'
+                'text': message
             }
             
             response = requests.post(url, json=data, timeout=10)
