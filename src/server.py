@@ -435,7 +435,9 @@ def handle_price(chat_id, crypto):
 def handle_top(chat_id):
     """顯示市值前10名"""
     try:
-        headers = {}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         if COINGECKO_API_KEY:
             headers['x-cg-demo-api-key'] = COINGECKO_API_KEY
         
@@ -447,30 +449,61 @@ def handle_top(chat_id):
             'page': 1
         }
         
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        
-        if response.status_code == 200:
-            coins = response.json()
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=10)
             
-            message = "🏆 <b>市值前10名加密貨幣</b>\n\n"
-            
-            for i, coin in enumerate(coins, 1):
-                name = coin['name']
-                symbol = coin['symbol'].upper()
-                price = coin['current_price']
-                change = coin['price_change_percentage_24h']
-                change_emoji = "🟢" if change >= 0 else "🔴"
+            if response.status_code == 200:
+                coins = response.json()
                 
-                message += f"{i}. <b>{name}</b> ({symbol})\n"
-                message += f"   ${price:,.2f} {change_emoji} {change:+.2f}%\n\n"
+                message = "🏆 <b>市值前10名加密貨幣</b>\n\n"
+                
+                for i, coin in enumerate(coins, 1):
+                    name = coin['name']
+                    symbol = coin['symbol'].upper()
+                    price = coin['current_price']
+                    change = coin['price_change_percentage_24h']
+                    change_emoji = "🟢" if change >= 0 else "🔴"
+                    
+                    message += f"{i}. <b>{name}</b> ({symbol})\n"
+                    message += f"   ${price:,.2f} {change_emoji} {change:+.2f}%\n\n"
+                
+                send_message(chat_id, message)
+                return
+            else:
+                logger.warning(f"CoinGecko API failed: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"CoinGecko connection failed: {e}")
             
-            send_message(chat_id, message)
-        else:
-            send_message(chat_id, "❌ 無法獲取市場數據")
-    
+        # Fallback to Binance/Hardcoded list if CoinGecko fails
+        handle_top_fallback(chat_id)
+            
     except Exception as e:
         logger.error(f"獲取Top 10失敗: {e}")
         send_message(chat_id, "❌ 查詢失敗，請稍後再試")
+
+def handle_top_fallback(chat_id):
+    """CoinGecko 失敗時的備用方案 (使用 Binance 查詢主要幣種)"""
+    top_coins = [
+        ('BTC', 'Bitcoin'), ('ETH', 'Ethereum'), ('BNB', 'BNB'), 
+        ('SOL', 'Solana'), ('XRP', 'XRP'), ('DOGE', 'Dogecoin'),
+        ('ADA', 'Cardano'), ('AVAX', 'Avalanche'), ('TRX', 'TRON'), ('DOT', 'Polkadot')
+    ]
+    
+    message = "🏆 <b>市場主要加密貨幣 (Fallback)</b>\n\n"
+    
+    rank = 1
+    for symbol, name in top_coins:
+        price_info = fetch_crypto_price_multi_source(symbol)
+        if price_info:
+            price = price_info['price']
+            change = price_info['change_24h']
+            change_emoji = "🟢" if change >= 0 else "🔴"
+            
+            message += f"{rank}. <b>{name}</b> ({symbol})\n"
+            message += f"   ${price:,.2f} {change_emoji} {change:+.2f}%\n\n"
+            rank += 1
+            
+    send_message(chat_id, message)
 
 
 def handle_alert(chat_id, user_id, parts):
