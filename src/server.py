@@ -21,7 +21,6 @@ from datetime import datetime
 import feedparser
 from concurrent.futures import ThreadPoolExecutor
 from .database import db
-from .risk_assessment import risk_assessment
 from .trading_strategy import trading_strategy
 from .market_monitor import init_monitor
 
@@ -190,15 +189,15 @@ def handle_start(chat_id, user_id):
 🤖 <b>歡迎使用智能加密貨幣投資顧問</b>
 
 我可以幫您：
-✅ 評估風險屬性並提供個性化建議
-✅ 分析進場時機與交易策略
-✅ 管理持倉並追蹤績效
-✅ 查詢即時價格與市場動態
+✅ 查詢即時價格與市場排名
+✅ 獲取最新加密貨幣新聞
+✅ 技術分析與交易建議
+✅ 設定價格提醒通知
 
 <b>快速開始：</b>
-1. /risk_profile - 完成風險評估問卷
-2. /analyze BTC - 獲取交易建議
-3. /positions - 管理您的持倉
+1. /price BTC - 查詢比特幣價格
+2. /analyze ETH - 獲取以太坊分析
+3. /news - 查看最新新聞
 
 輸入 /help 查看完整功能列表
 """
@@ -214,15 +213,6 @@ def handle_help(chat_id):
 /start - 開始使用 Bot
 /help - 顯示此說明
 
-<b>🎯 風險管理</b>
-/risk_profile - 開始風險評估問卷
-/my_profile - 查看風險評估結果
-
-<b>💼 持倉管理</b>
-/positions - 查看所有持倉和盈虧
-/add_position [幣種] [數量] [買入價] - 新增持倉
-/delete_position [幣種] - 刪除持倉
-
 <b>📊 市場資訊</b>
 /price [幣種] - 查詢即時價格
 /top [數量] - 市值排名 (預設前10名)
@@ -237,11 +227,9 @@ def handle_help(chat_id):
 /del_alert [ID] - 刪除提醒
 
 <b>📝 使用範例：</b>
-• /risk_profile
-• /add_position BTC 0.5 45000
-• /delete_position BTC
 • /price ETH
 • /top 5
+• /news BTC
 • /analyze BTC
 • /alert BTC 50000 high
 • /del_alert 1
@@ -289,26 +277,6 @@ def handle_news(chat_id, lang='zh'):
         send_message(chat_id, "❌ 獲取新聞失敗，請稍後再試")
 
 
-def handle_risk_profile(chat_id, user_id):
-    """處理風險評估問卷"""
-    question = risk_assessment.start_assessment(user_id)
-    send_message(chat_id, question)
-
-
-def handle_my_profile(chat_id, user_id):
-    """查看用戶風險屬性"""
-    # 初始化用戶
-    db.init_user(user_id)
-    
-    # 獲取摘要
-    summary = risk_assessment.get_user_risk_summary(user_id)
-    
-    if summary:
-        send_message(chat_id, summary)
-    else:
-        send_message(chat_id, "❌ 您尚未完成風險評估\n\n請使用 /risk_profile 開始評估")
-
-
 def get_allocation_suggestion(risk_level):
     """根據風險等級給出配置建議"""
     suggestions = {
@@ -326,7 +294,6 @@ def handle_analyze(chat_id, user_id, crypto):
     db.init_user(user_id)
     
     # 獲取風險配置
-    profile = db.get_current_risk_profile(user_id)
     if not profile:
         send_message(chat_id, "❌ 請先完成風險評估 /risk_profile")
         return
@@ -348,122 +315,6 @@ def handle_analyze(chat_id, user_id, crypto):
     )
     
     send_message(chat_id, strategy)
-
-
-def handle_positions(chat_id, user_id):
-    """顯示持倉列表"""
-    positions = db.get_positions(user_id)
-    
-    if not positions:
-        send_message(chat_id, "📊 您目前沒有持倉記錄\n\n使用 /add_position [幣種] [數量] [成本] 新增持倉")
-        return
-    
-    text = "📊 <b>您的持倉</b>\n\n"
-    total_value = 0
-    total_cost = 0
-    
-    for pos in positions:
-        crypto = pos['symbol']
-        amount = pos['quantity']
-        avg_cost = pos['entry_price'] # Also avg_cost might be entry_price in DB?
-        
-        # 獲取當前價格
-        price_data = fetch_crypto_price_multi_source(crypto.lower())
-        current_price = price_data['price'] if price_data else avg_cost
-        
-        position_value = amount * current_price
-        position_cost = amount * avg_cost
-        profit = position_value - position_cost
-        profit_pct = (profit / position_cost * 100) if position_cost > 0 else 0
-        
-        total_value += position_value
-        total_cost += position_cost
-        
-        profit_emoji = "🟢" if profit >= 0 else "🔴"
-        
-        text += f"""
-{profit_emoji} <b>{crypto.upper()}</b>
-持有: {amount:.4f}
-成本: ${avg_cost:.2f}
-現價: ${current_price:.2f}
-盈虧: ${profit:.2f} ({profit_pct:+.2f}%)
-
-"""
-    
-    total_profit = total_value - total_cost
-    total_profit_pct = (total_profit / total_cost * 100) if total_cost > 0 else 0
-    
-    text += f"""
-<b>總覽</b>
-總成本: ${total_cost:.2f}
-總市值: ${total_value:.2f}
-總盈虧: ${total_profit:.2f} ({total_profit_pct:+.2f}%)
-"""
-    
-    send_message(chat_id, text)
-
-
-def handle_add_position(chat_id, user_id, parts):
-    """新增持倉"""
-    if len(parts) < 4:
-        send_message(chat_id, "❌ 格式錯誤\n\n正確格式: /add_position [幣種] [數量] [成本]\n範例: /add_position BTC 0.5 45000")
-        return
-    
-    crypto = parts[1].upper()
-    try:
-        amount = float(parts[2])
-        avg_cost = float(parts[3])
-    except ValueError:
-        send_message(chat_id, "❌ 數量和成本必須是數字")
-        return
-    
-    db.add_position(user_id, crypto, amount, avg_cost)
-    send_message(chat_id, f"✅ 已新增持倉\n\n幣種: {crypto}\n數量: {amount}\n成本: ${avg_cost}\n\n使用 /positions 查看所有持倉")
-
-
-def handle_delete_position(chat_id, user_id, parts):
-    """刪除持倉"""
-    if len(parts) < 2:
-        send_message(chat_id, "❌ 格式錯誤\n\n正確格式: /delete_position [幣種]\n範例: /delete_position BTC")
-        return
-
-    crypto = parts[1].upper()
-
-    # 獲取該用戶的該幣種持倉
-    positions = db.get_positions(user_id)
-    target_position = None
-
-    for pos in positions:
-        if pos['symbol'].upper() == crypto and pos['status'] == 'open':
-            target_position = pos
-            break
-
-    if not target_position:
-        send_message(chat_id, f"❌ 未找到 {crypto} 的持倉記錄")
-        return
-
-    # 獲取當前價格作為退出價格
-    price_data = fetch_crypto_price_multi_source(crypto.lower())
-    exit_price = price_data['price'] if price_data else target_position['entry_price']
-
-    # 關閉持倉
-    success = db.close_position(target_position['id'], exit_price, "手動刪除")
-
-    if success:
-        profit = (exit_price - target_position['entry_price']) * target_position['quantity']
-        profit_pct = ((exit_price - target_position['entry_price']) / target_position['entry_price']) * 100
-
-        send_message(chat_id, f"""✅ 已刪除持倉
-
-幣種: {crypto}
-數量: {target_position['quantity']}
-買入價: ${target_position['entry_price']:.2f}
-當前價: ${exit_price:.2f}
-盈虧: ${profit:.2f} ({profit_pct:+.2f}%)
-
-使用 /positions 查看剩餘持倉""")
-    else:
-        send_message(chat_id, "❌ 刪除持倉失敗，請稍後再試")
 
 
 def handle_price(chat_id, crypto):
@@ -664,21 +515,11 @@ def webhook():
                     handle_start(chat_id, user_id)
                 elif command == '/help':
                     handle_help(chat_id)
-                elif command == '/risk_profile':
-                    handle_risk_profile(chat_id, user_id)
-                elif command == '/my_profile':
-                    handle_my_profile(chat_id, user_id)
                 elif command == '/analyze':
                     if len(parts) > 1:
                         handle_analyze(chat_id, user_id, parts[1])
                     else:
                         send_message(chat_id, "請指定幣種，例如: /analyze BTC")
-                elif command == '/positions':
-                    handle_positions(chat_id, user_id)
-                elif command == '/add_position':
-                    handle_add_position(chat_id, user_id, parts)
-                elif command == '/delete_position':
-                    handle_delete_position(chat_id, user_id, parts)
                 elif command == '/price':
                     if len(parts) > 1:
                         handle_price(chat_id, parts[1])
@@ -698,7 +539,6 @@ def webhook():
                     send_message(chat_id, "❌ 未知指令\n\n輸入 /help 查看可用指令")
             
             # 處理問卷回答
-            elif risk_assessment.is_in_assessment(user_id):
                 result = risk_assessment.process_answer(user_id, text)
                 
                 if result['status'] == 'completed':
