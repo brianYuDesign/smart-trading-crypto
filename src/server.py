@@ -191,13 +191,15 @@ def handle_start(chat_id, user_id):
 我可以幫您：
 ✅ 查詢即時價格與市場排名
 ✅ 獲取最新加密貨幣新聞
+✅ AI 新聞情緒分析與走勢預測
 ✅ 技術分析與交易建議
 ✅ 設定價格提醒通知
 
 <b>快速開始：</b>
 1. /price BTC - 查詢比特幣價格
-2. /analyze ETH - 獲取以太坊分析
+2. /trend - AI 分析市場趨勢
 3. /news - 查看最新新聞
+4. /analyze ETH - 技術分析
 
 輸入 /help 查看完整功能列表
 """
@@ -215,11 +217,13 @@ def handle_help(chat_id):
 
 <b>📊 市場資訊</b>
 /price [幣種] - 查詢即時價格
-/top [數量] - 市值排名 (預設前10名)
-/news [幣種] - 最新加密貨幣新聞
+/top - 市值排名前10名
+/news - 最新加密貨幣新聞
 
-<b>🔍 分析工具</b>
-/analyze [幣種] - 技術分析與交易建議
+<b>🤖 AI 分析工具</b>
+/trend - AI 市場趨勢預測（基於新聞情緒分析）
+/trend [幣種] - 分析特定幣種趨勢
+/analyze [幣種] - 技術指標分析與交易建議
 
 <b>🔔 價格提醒</b>
 /alert [幣種] [目標價] [high/low] - 設定價格提醒
@@ -227,12 +231,13 @@ def handle_help(chat_id):
 /del_alert [ID] - 刪除提醒
 
 <b>📝 使用範例：</b>
-• /price ETH
-• /top 5
-• /news BTC
+• /price BTC
+• /top
+• /trend - 整體市場趨勢
+• /trend ETH - 以太坊趨勢分析
+• /news
 • /analyze BTC
 • /alert BTC 50000 high
-• /del_alert 1
 """
     send_message(chat_id, help_text)
 
@@ -275,6 +280,137 @@ def handle_news(chat_id, lang='zh'):
     except Exception as e:
         logger.error(f"獲取新聞失敗: {e}")
         send_message(chat_id, "❌ 獲取新聞失敗，請稍後再試")
+
+
+def analyze_news_sentiment(news_items):
+    """分析新聞情緒並預測走勢"""
+    # 關鍵字情緒分析
+    positive_keywords = ['surge', 'rally', 'bullish', 'growth', 'adoption', 'breakthrough', 
+                        '上漲', '看漲', '突破', '增長', '採用', '利好', '暴漲', '飆升']
+    negative_keywords = ['crash', 'drop', 'bearish', 'decline', 'ban', 'hack', 'scam',
+                        '下跌', '看跌', '暴跌', '禁令', '駭客', '騙局', '崩盤']
+    
+    sentiment_score = 0
+    analyzed_news = []
+    
+    for item in news_items:
+        title_lower = item['title'].lower()
+        item_sentiment = 0
+        
+        # 計算單條新聞情緒
+        for keyword in positive_keywords:
+            if keyword.lower() in title_lower:
+                item_sentiment += 1
+        for keyword in negative_keywords:
+            if keyword.lower() in title_lower:
+                item_sentiment -= 1
+        
+        sentiment_score += item_sentiment
+        
+        # 判斷新聞傾向
+        if item_sentiment > 0:
+            sentiment_label = "📈 看漲"
+        elif item_sentiment < 0:
+            sentiment_label = "📉 看跌"
+        else:
+            sentiment_label = "📊 中性"
+        
+        analyzed_news.append({
+            'title': item['title'],
+            'link': item['link'],
+            'sentiment': sentiment_label,
+            'score': item_sentiment
+        })
+    
+    # 整體趨勢預測
+    if sentiment_score > 2:
+        overall_trend = "🚀 強烈看漲"
+        recommendation = "市場情緒積極，可考慮逢低進場"
+    elif sentiment_score > 0:
+        overall_trend = "📈 溫和看漲"
+        recommendation = "市場偏向樂觀，謹慎樂觀"
+    elif sentiment_score < -2:
+        overall_trend = "🔻 強烈看跌"
+        recommendation = "市場情緒悲觀，建議觀望或減倉"
+    elif sentiment_score < 0:
+        overall_trend = "📉 溫和看跌"
+        recommendation = "市場偏向悲觀，謹慎操作"
+    else:
+        overall_trend = "⚖️ 市場中性"
+        recommendation = "市場觀望氣氛濃厚，等待明確信號"
+    
+    return {
+        'overall_trend': overall_trend,
+        'sentiment_score': sentiment_score,
+        'recommendation': recommendation,
+        'analyzed_news': analyzed_news
+    }
+
+
+def handle_trend(chat_id, crypto=None):
+    """處理趨勢預測指令 - 基於新聞分析"""
+    try:
+        # 獲取新聞
+        feeds = NEWS_FEEDS.get('zh', NEWS_FEEDS['zh'])
+        news_items = []
+        
+        def fetch_feed(url):
+            return feedparser.parse(url)
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            results = executor.map(fetch_feed, feeds)
+            
+            for feed in results:
+                if feed.entries:
+                    for entry in feed.entries[:5]:  # 每個源取前5條
+                        # 如果指定幣種，過濾相關新聞
+                        if crypto:
+                            if crypto.upper() in entry.title.upper():
+                                news_items.append({
+                                    'title': entry.title,
+                                    'link': entry.link,
+                                    'published': entry.get('published', 'N/A')
+                                })
+                        else:
+                            news_items.append({
+                                'title': entry.title,
+                                'link': entry.link,
+                                'published': entry.get('published', 'N/A')
+                            })
+        
+        if not news_items:
+            if crypto:
+                send_message(chat_id, f"⚠️ 未找到關於 {crypto.upper()} 的相關新聞")
+            else:
+                send_message(chat_id, "⚠️ 暫時沒有最新新聞")
+            return
+        
+        # 分析新聞情緒
+        analysis = analyze_news_sentiment(news_items[:10])
+        
+        # 構建回覆訊息
+        if crypto:
+            message = f"📊 <b>{crypto.upper()} 市場趨勢分析</b>\n\n"
+        else:
+            message = "📊 <b>加密貨幣市場趨勢分析</b>\n\n"
+        
+        message += f"<b>整體趨勢：</b>{analysis['overall_trend']}\n"
+        message += f"<b>情緒指數：</b>{analysis['sentiment_score']}\n"
+        message += f"<b>操作建議：</b>{analysis['recommendation']}\n\n"
+        message += "━━━━━━━━━━━━━━━━━━\n\n"
+        message += "📰 <b>相關新聞分析：</b>\n\n"
+        
+        for idx, item in enumerate(analysis['analyzed_news'][:5], 1):
+            message += f"{idx}. {item['sentiment']}\n"
+            message += f"<a href='{item['link']}'>{item['title'][:80]}</a>\n\n"
+        
+        message += "\n💡 <i>* 本分析基於新聞標題關鍵字，僅供參考</i>"
+        
+        send_message(chat_id, message)
+        
+    except Exception as e:
+        logger.error(f"趨勢分析失敗: {e}")
+        send_message(chat_id, "❌ 趨勢分析失敗，請稍後再試")
 
 
 def get_allocation_suggestion(risk_level):
@@ -529,6 +665,11 @@ def webhook():
                     handle_top(chat_id)
                 elif command == '/news':
                     handle_news(chat_id)
+                elif command == '/trend':
+                    if len(parts) > 1:
+                        handle_trend(chat_id, parts[1])
+                    else:
+                        handle_trend(chat_id)
                 elif command == '/alert':
                     handle_alert(chat_id, user_id, parts)
                 elif command == '/myalerts':
