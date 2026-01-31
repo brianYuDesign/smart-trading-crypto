@@ -218,6 +218,7 @@ def handle_help(chat_id):
 /analyze [幣種] - 分析進場時機
 /positions - 查看我的持倉
 /add_position [幣種] [數量] [成本] - 新增持倉
+/delete_position [幣種] - 刪除持倉
 
 <b>📰 即時新聞</b>
 /news - 查看最新加密貨幣新聞
@@ -233,6 +234,7 @@ def handle_help(chat_id):
 • /analyze BTC
 • /price ETH
 • /add_position BTC 0.5 45000
+• /delete_position BTC
 • /alert ETH 3000
 • /del_alert 1 (刪除ID為1的提醒)
 """
@@ -409,6 +411,51 @@ def handle_add_position(chat_id, user_id, parts):
     
     db.add_position(user_id, crypto, amount, avg_cost)
     send_message(chat_id, f"✅ 已新增持倉\n\n幣種: {crypto}\n數量: {amount}\n成本: ${avg_cost}\n\n使用 /positions 查看所有持倉")
+
+
+def handle_delete_position(chat_id, user_id, parts):
+    """刪除持倉"""
+    if len(parts) < 2:
+        send_message(chat_id, "❌ 格式錯誤\n\n正確格式: /delete_position [幣種]\n範例: /delete_position BTC")
+        return
+
+    crypto = parts[1].upper()
+
+    # 獲取該用戶的該幣種持倉
+    positions = db.get_positions(user_id)
+    target_position = None
+
+    for pos in positions:
+        if pos['symbol'].upper() == crypto and pos['status'] == 'open':
+            target_position = pos
+            break
+
+    if not target_position:
+        send_message(chat_id, f"❌ 未找到 {crypto} 的持倉記錄")
+        return
+
+    # 獲取當前價格作為退出價格
+    price_data = fetch_crypto_price_multi_source(crypto.lower())
+    exit_price = price_data['price'] if price_data else target_position['entry_price']
+
+    # 關閉持倉
+    success = db.close_position(target_position['id'], exit_price, "手動刪除")
+
+    if success:
+        profit = (exit_price - target_position['entry_price']) * target_position['quantity']
+        profit_pct = ((exit_price - target_position['entry_price']) / target_position['entry_price']) * 100
+
+        send_message(chat_id, f"""✅ 已刪除持倉
+
+幣種: {crypto}
+數量: {target_position['quantity']}
+買入價: ${target_position['entry_price']:.2f}
+當前價: ${exit_price:.2f}
+盈虧: ${profit:.2f} ({profit_pct:+.2f}%)
+
+使用 /positions 查看剩餘持倉""")
+    else:
+        send_message(chat_id, "❌ 刪除持倉失敗，請稍後再試")
 
 
 def handle_price(chat_id, crypto):
@@ -622,6 +669,8 @@ def webhook():
                     handle_positions(chat_id, user_id)
                 elif command == '/add_position':
                     handle_add_position(chat_id, user_id, parts)
+                elif command == '/delete_position':
+                    handle_delete_position(chat_id, user_id, parts)
                 elif command == '/price':
                     if len(parts) > 1:
                         handle_price(chat_id, parts[1])
@@ -645,8 +694,17 @@ def webhook():
                 result = risk_assessment.process_answer(user_id, text)
                 
                 if result['status'] == 'completed':
+                    # 儲存風險評估結果到資料庫
+                    if result.get('result'):
+                        res = result['result']
+                        db.save_risk_profile(
+                            user_id=user_id,
+                            risk_score=res['risk_score'],
+                            answers=res.get('answers', [])
+                        )
+                        logger.info(f"用戶 {user_id} 完成風險評估，等級: {res['risk_level']}")
+                    
                     send_message(chat_id, result['message'])
-                    # 也可以顯示結果摘要
                 elif result['status'] == 'continue':
                     send_message(chat_id, result['message'])
                 elif result['status'] == 'error':
