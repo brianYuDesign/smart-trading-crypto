@@ -208,35 +208,43 @@ def handle_start(chat_id, user_id):
 def handle_help(chat_id):
     """處理 /help 指令"""
     help_text = """
-📖 <b>可用指令：</b>
+📖 <b>智能加密貨幣投資顧問 - 指令列表</b>
 
-<b>🎯 風險評估</b>
-/risk_profile - 風險屬性評估問卷
-/my_profile - 查看我的風險屬性
+<b>🚀 基礎指令</b>
+/start - 開始使用 Bot
+/help - 顯示此說明
 
-<b>📊 交易分析</b>
-/analyze [幣種] - 分析進場時機
-/positions - 查看我的持倉
-/add_position [幣種] [數量] [成本] - 新增持倉
+<b>🎯 風險管理</b>
+/risk_profile - 開始風險評估問卷
+/my_profile - 查看風險評估結果
+
+<b>💼 持倉管理</b>
+/positions - 查看所有持倉和盈虧
+/add_position [幣種] [數量] [買入價] - 新增持倉
 /delete_position [幣種] - 刪除持倉
 
-<b>📰 即時新聞</b>
-/news - 查看最新加密貨幣新聞
+<b>📊 市場資訊</b>
 /price [幣種] - 查詢即時價格
-/top - 市值前10名加密貨幣
+/top [數量] - 市值排名 (預設前10名)
+/news [幣種] - 最新加密貨幣新聞
+
+<b>🔍 分析工具</b>
+/analyze [幣種] - 技術分析與交易建議
 
 <b>🔔 價格提醒</b>
-/alert [幣種] [目標價] - 設定價格提醒
-/myalerts - 查看我的提醒列表
-/del_alert [ID] - 刪除指定提醒
+/alert [幣種] [目標價] [high/low] - 設定價格提醒
+/myalerts - 查看所有提醒
+/del_alert [ID] - 刪除提醒
 
-<b>範例：</b>
-• /analyze BTC
-• /price ETH
+<b>📝 使用範例：</b>
+• /risk_profile
 • /add_position BTC 0.5 45000
 • /delete_position BTC
-• /alert ETH 3000
-• /del_alert 1 (刪除ID為1的提醒)
+• /price ETH
+• /top 5
+• /analyze BTC
+• /alert BTC 50000 high
+• /del_alert 1
 """
     send_message(chat_id, help_text)
 
