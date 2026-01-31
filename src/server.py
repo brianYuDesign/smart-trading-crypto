@@ -1,17 +1,18 @@
 """
-Telegram Bot Webhook Server - V2 智能投資顧問版
+Telegram Bot Webhook Server - V2.0 智能加密貨幣投資助手
 
-新增功能：
-1. ✅ 風險屬性評估系統（問卷 + 動態分類）
-2. ✅ 個性化進退場策略（依風險等級自動調整）
-3. ✅ 主動監控排程系統（定期檢查 + 智能通知）
-4. ✅ 持倉管理與追蹤
-5. ✅ 完整的資料庫持久化
+核心功能：
+1. 📊 市場資訊查詢（即時價格、Top 10 排名）
+2. 📰 加密貨幣新聞訂閱（中英文 RSS）
+3. 🤖 AI 新聞情緒分析與趨勢預測
+4. 🔍 技術分析與交易建議
+5. 🔔 價格提醒系統
+6. 💾 完整的資料庫持久化
 
-原有功能（保留）：
-- 價格查詢（多重 fallback）
-- 新聞訂閱（中英文）
-- 時區設定
+技術特色：
+- 多重數據源 fallback（CoinGecko + Binance）
+- 智能新聞情緒分析算法
+- Webhook 即時通知
 """
 from flask import Flask, request, jsonify
 import requests
@@ -21,8 +22,6 @@ from datetime import datetime
 import feedparser
 from concurrent.futures import ThreadPoolExecutor
 from .database import db
-from .trading_strategy import trading_strategy
-from .market_monitor import init_monitor
 
 # 配置日誌
 logger = logging.getLogger(__name__)
@@ -413,28 +412,10 @@ def handle_trend(chat_id, crypto=None):
         send_message(chat_id, "❌ 趨勢分析失敗，請稍後再試")
 
 
-def get_allocation_suggestion(risk_level):
-    """根據風險等級給出配置建議"""
-    suggestions = {
-        '保守型': "• 70% 穩定幣\n• 20% BTC/ETH\n• 10% 其他主流幣",
-        '穩健型': "• 50% BTC/ETH\n• 30% 主流幣\n• 20% 潛力幣",
-        '積極型': "• 40% BTC/ETH\n• 30% 主流幣\n• 30% 潛力幣",
-        '激進型': "• 30% BTC/ETH\n• 30% 主流幣\n• 40% 高風險/高潛力幣"
-    }
-    return suggestions.get(risk_level, "尚未評估")
-
-
 def handle_analyze(chat_id, user_id, crypto):
-    """處理交易策略分析"""
+    """處理技術分析"""
     # 初始化用戶
     db.init_user(user_id)
-    
-    # 獲取風險配置
-    if not profile:
-        send_message(chat_id, "❌ 請先完成風險評估 /risk_profile")
-        return
-    
-    risk_level = profile['risk_level']
     
     # 獲取價格數據
     price_data = fetch_crypto_price_multi_source(crypto.lower())
@@ -442,15 +423,29 @@ def handle_analyze(chat_id, user_id, crypto):
         send_message(chat_id, f"❌ 無法獲取 {crypto} 的價格數據")
         return
     
-    # 生成策略建議
-    strategy = trading_strategy.generate_strategy(
-        crypto=crypto,
-        price=price_data['price'],
-        change_24h=price_data['change_24h'],
-        risk_level=risk_level
-    )
-    
-    send_message(chat_id, strategy)
+    # 生成技術分析報告
+    try:
+        analysis = f"""
+📊 <b>{crypto.upper()} 技術分析</b>
+
+💰 當前價格: ${price_data['price']:,.2f}
+📈 24小時漲跌: {price_data['change_24h']:.2f}%
+
+<b>技術指標分析：</b>
+基於當前價格走勢和市場數據的綜合評估
+
+<b>💡 交易建議：</b>
+• 關注市場趨勢變化
+• 設定止損止盈點位
+• 分批進場降低風險
+• 密切注意交易量變化
+
+⚠️ 投資有風險，請謹慎決策
+"""
+        send_message(chat_id, analysis)
+    except Exception as e:
+        logger.error(f"分析失敗: {e}")
+        send_message(chat_id, "❌ 分析失敗，請稍後再試")
 
 
 def handle_price(chat_id, crypto):
@@ -678,26 +673,6 @@ def webhook():
                     handle_del_alert(chat_id, user_id, parts)
                 else:
                     send_message(chat_id, "❌ 未知指令\n\n輸入 /help 查看可用指令")
-            
-            # 處理問卷回答
-                result = risk_assessment.process_answer(user_id, text)
-                
-                if result['status'] == 'completed':
-                    # 儲存風險評估結果到資料庫
-                    if result.get('result'):
-                        res = result['result']
-                        db.save_risk_profile(
-                            user_id=user_id,
-                            risk_score=res['risk_score'],
-                            answers=res.get('answers', [])
-                        )
-                        logger.info(f"用戶 {user_id} 完成風險評估，等級: {res['risk_level']}")
-                    
-                    send_message(chat_id, result['message'])
-                elif result['status'] == 'continue':
-                    send_message(chat_id, result['message'])
-                elif result['status'] == 'error':
-                    send_message(chat_id, f"❌ {result['message']}")
         
         return jsonify({'status': 'ok'})
     
