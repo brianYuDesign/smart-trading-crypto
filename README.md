@@ -8,6 +8,7 @@
 - **智能問卷**：10題風險評估問卷
 - **動態分類**：自動分類為保守型、穩健型、積極型
 - **個性化策略**：根據風險等級提供客製化建議
+- **持久化儲存**：評估結果自動保存到資料庫
 
 ### 2. 個性化進退場策略
 - **保守型**：止損 -8% / 止盈 +15%
@@ -26,6 +27,8 @@
 - 記錄進場價格和數量
 - 實時計算損益
 - 退場信號提醒
+- **新增持倉**：輕鬆追蹤投資組合
+- **刪除持倉**：靈活管理持倉記錄
 
 ### 5. 完整的資料庫系統
 - 用戶資料持久化
@@ -33,31 +36,51 @@
 - 交易信號追蹤
 - 通知記錄管理
 
-## 📋 指令列表
+## 📋 完整指令列表
 
-### 🆕 風險管理
-- `/risk_profile` - 開始風險屬性評估（10題問卷）
-- `/my_profile` - 查看當前風險屬性
-- `/analyze [幣種]` - 分析進場時機（預設 BTC/USDT）
-- `/positions` - 查看我的持倉
-- `/add_position <幣種> <價格> <數量>` - 新增持倉
+### 🚀 基礎指令
+- `/start` - 開始使用 Bot，顯示歡迎訊息
+- `/help` - 顯示所有可用指令和說明
 
-### 💰 行情查詢
-- `/price [幣種]` - 查詢加密貨幣價格（支援 bitcoin, ethereum 等）
-- `/news` - 獲取最新加密貨幣新聞（中文 + 英文）
+### 🎯 風險管理
+- `/risk_profile` - 開始風險評估問卷，評估你的投資風險屬性
+- `/my_profile` - 查看你的風險評估結果和投資建議
 
-### ⚙️ 設定
-- `/timezone [時區]` - 設定或查看時區（例：America/New_York）
+### 💼 持倉管理
+- `/positions` - 查看當前所有持倉和盈虧狀況
+- `/add_position <幣種> <數量> <買入價>` - 新增加密貨幣持倉
+  - 範例：`/add_position BTC 0.5 45000`
+- `/delete_position <幣種>` - 刪除指定的持倉記錄
+  - 範例：`/delete_position BTC`
+
+### 📊 市場資訊
+- `/price <幣種>` - 查詢指定加密貨幣的當前價格
+  - 範例：`/price BTC`
+- `/top [數量]` - 查看市值排名前 N 的加密貨幣（預設 10）
+  - 範例：`/top 5`
+- `/news [幣種]` - 獲取最新的加密貨幣新聞
+  - 範例：`/news BTC`
+
+### 🔍 分析工具
+- `/analyze <幣種>` - 分析指定加密貨幣的技術指標和趨勢
+  - 範例：`/analyze ETH`
+
+### 🔔 價格提醒
+- `/alert <幣種> <目標價> <high/low>` - 設定價格提醒，當達到目標價時通知
+  - 範例：`/alert BTC 50000 high`
+- `/myalerts` - 查看所有已設定的價格提醒
+- `/del_alert <提醒ID>` - 刪除指定的價格提醒
+  - 範例：`/del_alert 1`
 
 ## 🏗️ 系統架構
 
 ```
-webhook_server_v2.py       # 主程式（Flask + Telegram Bot）
-├── database_manager.py    # 資料庫管理層
+src/
+├── server.py              # 主程式（Flask + Telegram Bot）
+├── database.py            # 資料庫管理層
 ├── risk_assessment.py     # 風險評估模組
 ├── trading_strategy.py    # 交易策略引擎
-├── market_monitor.py      # 市場監控排程
-└── database_schema.sql    # 資料庫結構
+└── market_monitor.py      # 市場監控排程
 ```
 
 ## 📊 資料庫設計
@@ -93,7 +116,7 @@ pip install -r requirements.txt
 
 ### 4. 啟動服務
 ```bash
-python webhook_server_v2.py
+python src/server.py
 ```
 
 ### 5. 設定 Webhook
@@ -118,7 +141,7 @@ self.default_symbols = ['BTC/USDT', 'ETH/USDT']
 ```
 
 ### 通知上限
-在 `database_schema.sql` 中修改：
+在資料庫配置中修改：
 ```sql
 INSERT INTO system_config VALUES('max_notifications_per_day', '10', ...)
 ```
@@ -128,20 +151,21 @@ INSERT INTO system_config VALUES('max_notifications_per_day', '10', ...)
 ### 新用戶上手
 1. 發送 `/start` 查看功能介紹
 2. 使用 `/risk_profile` 完成風險評估（回答 10 題）
-3. 系統自動開啟智能監控服務
+3. 系統自動保存評估結果，開啟智能監控服務
 4. 使用 `/add_position` 新增持倉追蹤
 5. 等待系統主動發送進退場提醒
 
 ### 進場決策
-1. 使用 `/analyze BTC/USDT` 分析進場時機
+1. 使用 `/analyze BTC` 分析進場時機
 2. 系統會根據您的風險等級給出建議
 3. 顯示信心度和分析依據
-4. 如果進場，使用 `/add_position` 記錄
+4. 如果進場，使用 `/add_position BTC 0.5 45000` 記錄
 
 ### 持倉管理
 1. 使用 `/positions` 查看當前持倉
 2. 系統會定期檢查並發送退場信號
 3. 達到止損/止盈時會主動通知
+4. 使用 `/delete_position BTC` 移除已平倉的記錄
 
 ## 🎯 策略參數
 
@@ -189,6 +213,12 @@ INSERT INTO system_config VALUES('max_notifications_per_day', '10', ...)
 - 所有通知記錄可追溯和審計
 
 ## 📝 更新日誌
+
+### V2.1.0 (2026-01-31)
+- ✅ 修復風險評估結果未儲存的問題
+- ✅ 新增 `/delete_position` 持倉刪除功能
+- ✅ 更新完整的指令列表和說明
+- ✅ 優化 `/help` 指令內容
 
 ### V2.0.0 (2024-01-30)
 - ✅ 新增風險屬性評估系統
